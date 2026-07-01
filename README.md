@@ -1,3 +1,15 @@
+## Csak használni akarod? (nem fejlesztőknek)
+
+Töltsd le a **[Cserepeslemez-Kalkulator.html](./Cserepeslemez-Kalkulator.html)**
+fájlt (GitHub-on: kattints rá → **Download raw file**), majd dupla kattintás
+rá — megnyílik a böngésződben, és rögtön használható. Nincs szükség Node.js-re,
+telepítésre vagy internetkapcsolatra, minden egyetlen fájlban van.
+
+(A `kalkulator-app/` mappa egy alternatív, több fájlból álló verzió statikus
+szerverre; a fejlesztéshez lásd lent.)
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

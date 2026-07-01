@@ -222,6 +222,19 @@ szöveg (`text-slate-800`/`slate-500`), kék (`blue-600`) elsődleges akcentus.
 Korábban sötétkék gradiens háttér + üveg (`backdrop-blur-xl`, `bg-white/10`)
 kártyák voltak — ez teljesen le lett cserélve.
 
+## Terjesztés — mezei felhasználónak
+
+`Cserepeslemez-Kalkulator.html` (repo gyökér): egyetlen, önmagában futtatható
+HTML fájl — a `vite-plugin-singlefile` minden JS-t és CSS-t inline-ol bele
+(`SINGLEFILE=1 npm run build`, kimenet: `dist-singlefile/`, gitignore-olva).
+Nincs benne külső `<script src>`/`<link rel=stylesheet>`, ezért `file://`-ból,
+dupla kattintással is megnyílik, szerver és Node.js nélkül (az inline
+`<script type="module">` nem esik a modul-CORS korlátozás alá, csak a
+külön fájlból betöltött modulok). Letöltés: GitHub → fájl → "Download raw file".
+
+A `kalkulator-app/` (lásd lent) ezzel szemben több fájlos statikus build,
+ahhoz kell egy minimális fájlszerver (`npx serve` / `python -m http.server`).
+
 ## Technológia
 
 - React 19 + Vite + TypeScript
