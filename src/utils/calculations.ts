@@ -47,7 +47,15 @@ function maxHeightInColumn(points: [number, number][], colX1: number, colX2: num
 
 function columnToSheetLength(colHeightM: number, eaveOverhangM: number): { modules: number; lengthM: number } {
   if (colHeightM <= 0) return { modules: 0, lengthM: 0 }
-  const modules = Math.ceil(colHeightM / SHEET.MODULE_M)
+  // Y=0 a csurgó tövénél van, ezért a moduloknak csak a csurgó és orr közötti
+  // nettó részt kell lefedniük: height − csurgó − orr.
+  const netH = Math.max(0, colHeightM - eaveOverhangM - SHEET.NOSE_M)
+  let modules = Math.ceil(netH / SHEET.MODULE_M)
+  if (modules < 1) modules = 1
+  // Ha a nettó magasság pontosan modulhatárra esik, a vágás éppen a modulcsíkra
+  // kerülne → +1 modul (legalább 5 cm plus biztosítása).
+  const remainder = netH % SHEET.MODULE_M
+  if (remainder < 1e-6) modules += 1
   const lengthM = Math.round((SHEET.NOSE_M + modules * SHEET.MODULE_M + eaveOverhangM) * 1000) / 1000
   return { modules, lengthM }
 }
