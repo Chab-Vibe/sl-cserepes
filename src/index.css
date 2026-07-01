@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: linear-gradient(160deg, #0f1f3d 0%, #1a3a6e 40%, #1e5a8a 100%);
+  background-attachment: fixed;
+  min-height: 100dvh;
+}
+
+#root {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    background: white !important;
+    font-family: Arial, sans-serif;
+  }
+
+  #root {
+    max-width: 100% !important;
+  }
+
+  /* Hide elements marked print:hidden */
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Grid becomes single column */
+  .grid {
+    display: block !important;
+  }
+
+  /* Card chrome: transparent on print */
+  .backdrop-blur-xl {
+    backdrop-filter: none !important;
+  }
+
+  /* Sheet layout: full width, white background */
+  .sheet-layout-wrapper {
+    display: block !important;
+    width: 100%;
+    margin: 0 0 12px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .sheet-layout-wrapper h3 {
+    color: #333 !important;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .sheet-layout-wrapper svg {
+    width: 100% !important;
+    height: auto !important;
+    border: 1px solid #ccc;
+  }
+
+  /* Results panel: full width, after drawings */
+  aside {
+    width: 100% !important;
+    position: static !important;
+    margin-top: 16px;
+  }
+}
