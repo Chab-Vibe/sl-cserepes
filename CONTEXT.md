@@ -7,6 +7,9 @@ cserepeslemezhez (a Blachdom kínálatában nem szerepel a szükséges méret).
 Az app összetett tetőformákhoz számol anyagmennyiséget és vizuálisan ábrázolja
 a kiosztást.
 
+A modul-rugalmassági rendszer forrása: `Bilka-Module-07-01-2026_09_41_PM.png`
+(BILKA/RECOPY KFT admin felület, Modul_35 tábla) — lásd „Számítási logika".
+
 ---
 
 ## Lemez állandók
@@ -18,35 +21,72 @@ a kiosztást.
 | Hasznos szélesség | 1 000 mm |
 | Orr (nose) | 50 mm |
 | Csurgó (eave) | felhasználó adja meg, alapértelmezett 50 mm |
+| Rövid modul (kompresszió) | max −30 mm modulonként |
+| Hosszú modul (nyújtás) | max +250 mm modulonként |
+| Max. egybefüggő lemezhossz | 6 000 mm (felhasználói jóváhagyással felette is) |
+| Toldási átfedés | 120 mm |
 
 ---
 
 ## Számítási logika (`src/utils/calculations.ts`)
 
-### Modulszámítás
+### Modulszámítás — BILKA rugalmas modulrendszer
+
+A `Bilka-Module-07-01-2026_09_41_PM.png` (BILKA/RECOPY admin felület, Modul_35
+fül) alapján: minden modulszámhoz (Mn) tartozik egy **rövid** tartomány
+(1–3. oszlop, −1..−3 cm), egy **teljes** modul érték (4. oszlop) és egy
+**hosszú** tartomány (5. oszloptól, +1..+25 cm). A lemez tehát modulonként
+kis mértékben összenyomható/nyújtható, hogy pontosan a szükséges magasságra
+álljon, extra modul (és anyagpazarlás) nélkül.
 
 ```
-nettó magasság = oszlopmagasság − csurgó − orr
-modulok = ceil(nettó magasság / 350mm)
-ha nettó magasság % 350mm == 0 → modulok += 1   (5 cm-es szabály)
-lemezhossz = orr + modulok × 350mm + csurgó
+nettó magasság (netH) = oszlopmagasság − csurgó − orr
+
+// minimális modulszám n, amivel netH még lefedhető a nyújtási határon belül:
+n = legkisebb egész, amire  n × 350mm + 250mm ≥ netH
+
+// tényleges modulhossz: netH, de legalább a rövidítési határ (kompresszió max 30mm)
+modulhossz = max(netH, n × 350mm − 30mm)
+
+lemezhossz = orr + modulhossz + csurgó
 ```
 
 **Fontos:** Y=0 a csurgó tövénél van (a fascia alatt), tehát az orr és a csurgó
 már fedik a tető széleit — a moduloknak csak a kettő közötti részt kell lefedniük.
 
-**5 cm-es szabály:** ha a vágás pontosan modulhatárra esne (nettó magasság
-osztható 350-nel), +1 modullal biztosítunk legalább 5 cm pluszt.
+A régi „mindig felfelé kerekítés + 5 cm szabály” logikát ez a rugalmas
+illesztés váltotta fel: a legtöbb esetben a lemezhossz pontosan a nettó
+magasságra áll (nulla pazarlás), csak a ritka „rés-zónában" (kb. 7 cm sáv
+két modulszám tartománya között) kerül a hossz kicsit a szükséges fölé.
+
+### 6 méter fölötti lemezek — toldás átfedéssel
+
+Egy lemez gyártási hossza jellemzően max. 6 m. Ha a fenti számítás ennél
+hosszabb eredményt adna:
+
+- **alapértelmezett (`allowOversize=false`):** a rendszer a lemezt
+  **szegmensekre bontja** modulhatáron: az első (csurgóhoz legközelebbi)
+  darab a lehető legtöbb teljes modult tartalmazza 6 m-en belül; minden
+  további darab 120 mm-rel ráépül (átfedés) az előzőre, az utolsó darab a
+  fenti rugalmas illesztéssel pontosan a maradék magasságra áll.
+- **felhasználói jóváhagyással (`allowOversize=true`, `Header.tsx` kapcsoló):**
+  egyetlen egybefüggő lemez, akkor is, ha 6 m fölötti — ilyenkor az
+  eredménylistában és a rajz jelmagyarázatában piros „6M+” jelzés figyelmeztet,
+  hogy egyedi gyártást igényel.
+
+A kapcsoló globális (`useStore.allowOversize`, localStorage:
+`cserepeslemez_allow_oversize`), minden tetősíkra egyszerre vonatkozik.
+
+A kiosztási rajzon (`SheetLayout.tsx`) a toldott oszlopoknál minden
+szegmens saját téglalapként jelenik meg a saját hosszával, az átfedési sáv
+sárga sraffozással van kiemelve.
 
 ### Ellenőrzés a BONA PLUS 350 táblával
 
-| Modulok | BONA (mm) | Saját (eave=70mm) |
+| Modulok | BONA (mm) | Saját (eave=70mm, régi logika) |
 |---|---|---|
 | 1 | 470 | 50+350+70 = 470 ✓ |
 | 12 | 4320 | 50+4200+70 = 4320 ✓ |
-
-Példa: 4 m-es tető, 12 cm csurgóval →
-`netH = 4.000 − 0.120 − 0.050 = 3.830m` → 11 modul → `0.050 + 3.850 + 0.120 = 4.020m`
 
 ### Szélesség
 
@@ -68,18 +108,27 @@ interface RoofPlane {
   alignment: 'left' | 'center' | 'right'
 }
 
+// Egy fizikailag legyártott/rendelhető lemezdarab egy oszlopon belül.
+interface SheetSegment {
+  order: number       // 0 = csurgóhoz legközelebbi (alsó) darab
+  modules: number
+  lengthM: number
+  startM: number       // oszlop-koordináta, m
+  endM: number
+}
+
 interface ColumnResult {
   index: number
   heightM: number
-  modules: number
-  sheetLengthM: number
+  segments: SheetSegment[]   // normál esetben 1 elem, 6m+ toldásnál 2+
+  isSplit: boolean
 }
 
 interface PlaneResult {
   planeId: string
   planeName: string
   columns: ColumnResult[]
-  totalSheets: number
+  totalSheets: number   // Σ segments.length minden oszlopon
 }
 
 interface OrderGroup {
@@ -110,8 +159,9 @@ src/
     ├── visualization/
     │   └── SheetLayout.tsx                — CAD-stílusú SVG kiosztási rajz
     └── results/
-        ├── ResultsSummary.tsx             — rendelési összesítő + másolás
-        ├── ResultsTable.tsx               — síkonkénti táblázat
+        ├── ResultsSummary.tsx             — rendelési összesítő + másolás (képernyőn)
+        ├── ResultsTable.tsx               — síkonkénti táblázat (képernyőn)
+        ├── PrintReport.tsx                — nyomtatás 1. oldala (pozíciótáblázat)
         └── PdfExport.tsx                  — nyomtatás gomb
 ```
 
@@ -126,16 +176,36 @@ A `kiosztás.pdf` referencia alapján:
 - Kék alsó méretvonal (sokszög szélessége mm-ben)
 - Szürke bal oldali magassági méretvonal
 - Sraffozott terület az oszlop polügonon kívüli (túlnyúló) részén
-- Jelmagyarázat jobb alul: `XXXX mm — N db (M×350+50+csurgó)`
+- Jelmagyarázat jobb alul: `XXXX mm — N db (M×350+50+csurgó)`, 6 m fölötti
+  hosszaknál piros kerettel/szöveggel kiemelve
+
+Toldott oszlopoknál (`col.isSplit`) minden `SheetSegment` saját téglalapként
+rajzolódik ki a saját `startM`–`endM` tartományában; a szomszédos szegmensek
+közötti 120 mm-es átfedési sávot narancssárga sraffozás (`OVERLAP_HATCH_ID`
+pattern) jelzi.
 
 ---
 
 ## Nyomtatás / PDF export
 
-`window.print()` + `@media print` CSS stratégia:
-- `.print:hidden` osztály: PolygonEditor, vezérlők, gombok, fejléc
-- `.sheet-layout-wrapper`: mindig látható nyomtatáskor
-- `aside`: teljes szélességű, statikus pozíció nyomtatásban
+`window.print()` + `@media print` CSS stratégia. A `kiosztás.pdf` referencia
+(BLACHDOM PLUS / RS Dachy 5 "MÉRETSPECIFIKÁCIÓ") felépítését követi:
+
+1. **1. oldal — `PrintReport.tsx`** (`hidden print:block`, az App tetején,
+   a `Header` előtt): síkonkénti táblázat — pozíció szám, hossz (mm),
+   darabszám, terület (m² = hossz × darabszám × hasznos szélesség),
+   sík-összefoglalás sor, majd „Mindösszesen" sáv az összes sík összesítve.
+   Az on-screen `ResultsSummary`/`ResultsTable` ezért `print:hidden` (nyomtatva
+   duplikáció lenne).
+2. **2. oldaltól — kiosztási rajzok**: minden `.sheet-layout-wrapper`
+   (`SheetLayout.tsx`, `index.css`) `break-before: page`-t kap, így minden
+   tetősík rajza saját oldalon indul, a PrintReport táblázata után.
+
+Egyéb szabályok:
+- `.print:hidden` osztály: PolygonEditor, vezérlők, gombok, fejléc,
+  `AddPlaneButton`, a split/oversize figyelmeztető sávok (`PlaneCard.tsx`)
+- `aside`: teljes szélességű, statikus pozíció nyomtatásban (de tartalma
+  `print:hidden`, csak a layout-öröklés miatt maradt a szabály)
 - SVG fehér háttér, `print-color-adjust: exact`
 
 **Korábbi hiba:** az App.tsx-ben a `<section className="print:hidden">` elrejtette
@@ -144,11 +214,20 @@ elemekre kerül, nem a szülő section-ra.
 
 ---
 
+## UI design
+
+Világos, letisztult felület (2026-07 óta): `#f1f5f9` (slate-100) háttér,
+fehér kártyák (`bg-white`, `border-slate-200`, `shadow-sm`), sötétszürke
+szöveg (`text-slate-800`/`slate-500`), kék (`blue-600`) elsődleges akcentus.
+Korábban sötétkék gradiens háttér + üveg (`backdrop-blur-xl`, `bg-white/10`)
+kártyák voltak — ez teljesen le lett cserélve.
+
 ## Technológia
 
 - React 19 + Vite + TypeScript
 - Tailwind CSS v4
-- Zustand (localStorage perzisztencia, kulcs: `cserepeslemez_planes`)
+- Zustand (localStorage perzisztencia, kulcsok: `cserepeslemez_planes`,
+  `cserepeslemez_allow_oversize`)
 - lucide-react ikonok
 - SVG-alapú rajz (nincs külső chart könyvtár)
 - Preview: port 5173 (`.claude/launch.json`)

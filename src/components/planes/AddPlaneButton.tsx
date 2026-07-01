@@ -6,7 +6,7 @@ export function AddPlaneButton() {
   return (
     <button
       onClick={addPlane}
-      className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/30 py-3 text-white/60 hover:text-white hover:border-white/50 hover:bg-white/5 transition-all text-sm"
+      className="mt-3 w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 py-3 text-slate-500 hover:text-slate-800 hover:border-slate-400 hover:bg-slate-50 transition-all text-sm print:hidden"
     >
       <Plus size={16} />
       Tetősík hozzáadása

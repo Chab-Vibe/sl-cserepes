@@ -3,11 +3,11 @@ import { calculatePlane } from '../../utils/calculations'
 import { PlaneCard } from './PlaneCard'
 
 export function PlaneList() {
-  const { planes, updatePlane, removePlane } = useStore()
+  const { planes, allowOversize, updatePlane, removePlane } = useStore()
 
   if (planes.length === 0) {
     return (
-      <div className="rounded-2xl bg-white/5 border border-white/10 p-8 text-center text-white/40 text-sm">
+      <div className="rounded-2xl bg-white border border-slate-200 p-8 text-center text-slate-400 text-sm">
         Még nincs tetősík megadva.<br />Kattints a „+ Tetősík hozzáadása" gombra a kezdéshez.
       </div>
     )
@@ -19,7 +19,7 @@ export function PlaneList() {
         <PlaneCard
           key={plane.id}
           plane={plane}
-          result={calculatePlane(plane)}
+          result={calculatePlane(plane, allowOversize)}
           onChange={patch => updatePlane(plane.id, patch)}
           onRemove={() => removePlane(plane.id)}
         />

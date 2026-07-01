@@ -1,4 +1,4 @@
-import type { RoofPlane, PlaneResult } from '../../types'
+import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
 import { polyWidth, polyHeight, SHEET, getStartOffset } from '../../utils/calculations'
 
 interface Props {
@@ -47,6 +47,7 @@ export function SheetLayout({ plane, result }: Props) {
   const polyPtStr = plane.points.map(([wx, wy]) => toSvg(wx, wy).join(',')).join(' ')
   const clipId = `lc-${plane.id}`
   const HATCH_ID = `hatch-${plane.id}`
+  const OVERLAP_HATCH_ID = `ohatch-${plane.id}`
 
   function colWorldX(col: PlaneResult['columns'][number]) {
     const x1 = startX + col.index * SHEET.EFFECTIVE_WIDTH_M
@@ -57,23 +58,30 @@ export function SheetLayout({ plane, result }: Props) {
   const totalWidthMm = Math.round(maxX * 1000)
   const totalSheetWidthMm = Math.round(totalSheetW * 1000)
 
-  // Collect unique sheet lengths for legend
-  const uniqueLengths = [...new Set(result.columns.map(c => c.sheetLengthM))].sort((a, b) => a - b)
+  // Collect unique segment lengths for legend
+  const allSegments = result.columns.flatMap(c => c.segments)
+  const uniqueLengths = [...new Set(allSegments.map(s => s.lengthM))].sort((a, b) => a - b)
+  const hasSplit = result.columns.some(c => c.isSplit)
 
   return (
     <div className="mt-4 sheet-layout-wrapper">
-      <h3 className="text-white/60 print:text-black text-xs font-medium mb-2 uppercase tracking-wider">
+      <h3 className="text-slate-500 print:text-black text-xs font-medium mb-2 uppercase tracking-wider">
         Kiosztási rajz — {plane.name}
-        {overhangLeft > 0.001 && <span className="ml-2 text-amber-400">◄ {(overhangLeft*100).toFixed(0)} cm túlnyúlás bal</span>}
-        {overhangRight > 0.001 && <span className="ml-2 text-amber-400">► {(overhangRight*100).toFixed(0)} cm túlnyúlás jobb</span>}
+        {overhangLeft > 0.001 && <span className="ml-2 text-amber-600">◄ {(overhangLeft*100).toFixed(0)} cm túlnyúlás bal</span>}
+        {overhangRight > 0.001 && <span className="ml-2 text-amber-600">► {(overhangRight*100).toFixed(0)} cm túlnyúlás jobb</span>}
+        {hasSplit && <span className="ml-2 text-rose-500">⚠ toldott lemez ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedés)</span>}
       </h3>
 
-      <div className="rounded-xl overflow-hidden border border-white/10 print:border-gray-300 print:rounded-none bg-white">
+      <div className="rounded-xl overflow-hidden border border-slate-200 print:border-gray-300 print:rounded-none bg-white">
         <svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ background: 'white' }}>
           <defs>
             {/* Hatch for overhang */}
             <pattern id={HATCH_ID} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
               <line x1={0} y1={0} x2={0} y2={6} stroke="#aaa" strokeWidth={1.2} />
+            </pattern>
+            {/* Hatch for sheet-to-sheet overlap */}
+            <pattern id={OVERLAP_HATCH_ID} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(-45)">
+              <line x1={0} y1={0} x2={0} y2={6} stroke="#d97706" strokeWidth={1.4} />
             </pattern>
             {/* Clip to polygon */}
             <clipPath id={clipId}>
@@ -92,45 +100,63 @@ export function SheetLayout({ plane, result }: Props) {
             const [sx1] = toSvg(wx1, 0)
             const [sx2] = toSvg(wx2, 0)
             const colPx = sx2 - sx1
-            const [, syTop] = toSvg(wx1, col.sheetLengthM)
+            const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
+            const [, syTop] = toSvg(wx1, colTopM)
             const [, syBot] = toSvg(wx1, 0)
-            const colH = syBot - syTop
 
             const leftOH  = Math.max(0, 0 - wx1)
             const rightOH = Math.max(0, wx2 - maxX)
-
-            const lenMm = Math.round(col.sheetLengthM * 1000)
             const cx = (sx1 + sx2) / 2
-            const cy = (syTop + syBot) / 2
 
             return (
               <g key={col.index}>
-                {/* Column background — white, thin gray border */}
-                <rect x={sx1} y={syTop} width={colPx} height={colH}
-                  fill="white" stroke="#888" strokeWidth={0.8} />
+                {/* One rect per physical segment */}
+                {col.segments.map((seg: SheetSegment) => {
+                  const [, segSyTop] = toSvg(wx1, seg.endM)
+                  const [, segSyBot] = toSvg(wx1, seg.startM)
+                  const segH = segSyBot - segSyTop
+                  const cySeg = (segSyTop + segSyBot) / 2
+                  const lenMm = Math.round(seg.lengthM * 1000)
+                  return (
+                    <g key={seg.order}>
+                      <rect x={sx1} y={segSyTop} width={colPx} height={segH}
+                        fill="white" stroke="#888" strokeWidth={0.8} />
+                      {colPx > 14 && segH > 12 && (
+                        <text
+                          x={cx} y={cySeg}
+                          textAnchor="middle" dominantBaseline="middle"
+                          fill="#111"
+                          fontSize={colPx > 40 ? 11 : colPx > 22 ? 9 : 7}
+                          fontFamily="Arial,sans-serif"
+                          transform={`rotate(-90,${cx},${cySeg})`}
+                        >
+                          {lenMm}
+                        </text>
+                      )}
+                    </g>
+                  )
+                })}
+
+                {/* Overlap bands between consecutive segments */}
+                {col.segments.slice(1).map((seg) => {
+                  const overlapStart = seg.startM
+                  const overlapEnd = seg.startM + SHEET.OVERLAP_M
+                  const [, obTop] = toSvg(wx1, overlapEnd)
+                  const [, obBot] = toSvg(wx1, overlapStart)
+                  return (
+                    <rect key={`ov${seg.order}`} x={sx1} y={obTop} width={colPx} height={obBot - obTop}
+                      fill={`url(#${OVERLAP_HATCH_ID})`} stroke="#d97706" strokeWidth={0.6} />
+                  )
+                })}
 
                 {/* Overhang hatch (outside polygon) */}
                 {leftOH > 0.001 && (
-                  <rect x={sx1} y={syTop} width={leftOH * scale} height={colH}
+                  <rect x={sx1} y={syTop} width={leftOH * scale} height={syBot - syTop}
                     fill={`url(#${HATCH_ID})`} />
                 )}
                 {rightOH > 0.001 && (
-                  <rect x={sx2 - rightOH * scale} y={syTop} width={rightOH * scale} height={colH}
+                  <rect x={sx2 - rightOH * scale} y={syTop} width={rightOH * scale} height={syBot - syTop}
                     fill={`url(#${HATCH_ID})`} />
-                )}
-
-                {/* Sheet length label — rotated, centered in column */}
-                {colPx > 14 && (
-                  <text
-                    x={cx} y={cy}
-                    textAnchor="middle" dominantBaseline="middle"
-                    fill="#111"
-                    fontSize={colPx > 40 ? 11 : colPx > 22 ? 9 : 7}
-                    fontFamily="Arial,sans-serif"
-                    transform={`rotate(-90,${cx},${cy})`}
-                  >
-                    {lenMm}
-                  </text>
                 )}
               </g>
             )
@@ -236,14 +262,15 @@ export function SheetLayout({ plane, result }: Props) {
             return (
               <g>
                 {uniqueLengths.map((len, i) => {
-                  const cnt = result.columns.filter(c => c.sheetLengthM === len).length
-                  const col = result.columns.find(c => c.sheetLengthM === len)!
+                  const cnt = allSegments.filter(s => s.lengthM === len).length
+                  const seg = allSegments.find(s => s.lengthM === len)!
                   const ly = legendY0 - (uniqueLengths.length - 1 - i) * 14
+                  const overLimit = len > SHEET.MAX_SINGLE_LENGTH_M
                   return (
                     <g key={len}>
-                      <rect x={legendX} y={ly - 9} width={9} height={9} fill="#ddd" stroke="#888" strokeWidth={0.6} rx={1} />
+                      <rect x={legendX} y={ly - 9} width={9} height={9} fill={overLimit ? '#fecaca' : '#ddd'} stroke={overLimit ? '#dc2626' : '#888'} strokeWidth={0.6} rx={1} />
                       <text x={legendX + 13} y={ly} fill="#333" fontSize={8.5} fontFamily="Arial,sans-serif">
-                        {Math.round(len * 1000)} mm — {cnt} db  ({col.modules}×350+50+{Math.round(plane.eaveOverhangM * 1000)})
+                        {Math.round(len * 1000)} mm — {cnt} db  ({seg.modules}×350{seg.order === 0 ? `+50+${Math.round(plane.eaveOverhangM * 1000)}` : ''})
                       </text>
                     </g>
                   )

@@ -1,17 +1,20 @@
 import { create } from 'zustand'
 import type { RoofPlane } from '../types'
-import { loadPlanes, savePlanes } from '../utils/storage'
+import { loadPlanes, savePlanes, loadAllowOversize, saveAllowOversize } from '../utils/storage'
 
 interface Store {
   planes: RoofPlane[]
+  allowOversize: boolean
   addPlane: () => void
   updatePlane: (id: string, patch: Partial<RoofPlane>) => void
   removePlane: (id: string) => void
+  setAllowOversize: (value: boolean) => void
   reset: () => void
 }
 
 export const useStore = create<Store>((set, get) => ({
   planes: loadPlanes(),
+  allowOversize: loadAllowOversize(),
 
   addPlane: () => {
     const planes = get().planes
@@ -37,6 +40,11 @@ export const useStore = create<Store>((set, get) => ({
     const updated = get().planes.filter(p => p.id !== id)
     savePlanes(updated)
     set({ planes: updated })
+  },
+
+  setAllowOversize: (value) => {
+    saveAllowOversize(value)
+    set({ allowOversize: value })
   },
 
   reset: () => {

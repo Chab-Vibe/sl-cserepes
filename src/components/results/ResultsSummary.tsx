@@ -1,7 +1,7 @@
 import { Copy, Check } from 'lucide-react'
 import { useState } from 'react'
 import type { OrderGroup } from '../../types'
-import { totalSheets } from '../../utils/calculations'
+import { totalSheets, SHEET } from '../../utils/calculations'
 
 interface Props {
   groups: OrderGroup[]
@@ -23,21 +23,21 @@ export function ResultsSummary({ groups }: Props) {
 
   if (groups.length === 0) {
     return (
-      <div className="rounded-2xl bg-white/5 border border-white/10 p-5 text-white/30 text-sm text-center">
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 text-slate-400 text-sm text-center print:hidden">
         Az eredmény itt jelenik meg.
       </div>
     )
   }
 
   return (
-    <div className="rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 p-4 print-block">
+    <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 print:hidden">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-white font-semibold text-sm">Rendelési összesítő</h2>
+        <h2 className="text-slate-800 font-semibold text-sm">Rendelési összesítő</h2>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-white/50 hover:text-white text-xs transition-colors print:hidden"
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs transition-colors print:hidden"
         >
-          {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+          {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
           {copied ? 'Másolva' : 'Másolás'}
         </button>
       </div>
@@ -46,17 +46,20 @@ export function ResultsSummary({ groups }: Props) {
         {groups.map(g => (
           <div key={g.lengthM} className="flex justify-between items-start">
             <div>
-              <span className="text-white font-medium">{g.lengthM.toFixed(3)} m-es lemez</span>
-              <div className="text-white/40 text-xs">{g.planeNames.join(', ')}</div>
+              <span className="text-slate-700 font-medium">{g.lengthM.toFixed(3)} m-es lemez</span>
+              {g.lengthM > SHEET.MAX_SINGLE_LENGTH_M && (
+                <span className="ml-1.5 text-rose-500 text-[10px] font-semibold align-middle">6M+</span>
+              )}
+              <div className="text-slate-400 text-xs">{g.planeNames.join(', ')}</div>
             </div>
-            <span className="text-blue-300 font-bold text-base ml-4">{g.totalSheets} db</span>
+            <span className="text-blue-600 font-bold text-base ml-4">{g.totalSheets} db</span>
           </div>
         ))}
       </div>
 
-      <div className="mt-3 pt-3 border-t border-white/20 flex justify-between items-center">
-        <span className="text-white/60 text-sm">Összesen</span>
-        <span className="text-white font-bold text-xl">{total} db</span>
+      <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+        <span className="text-slate-500 text-sm">Összesen</span>
+        <span className="text-slate-800 font-bold text-xl">{total} db</span>
       </div>
     </div>
   )
