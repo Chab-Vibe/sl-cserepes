@@ -1,4 +1,4 @@
-import { Trash2, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 'lucide-react'
+import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 'lucide-react'
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
@@ -9,6 +9,7 @@ interface Props {
   result: PlaneResult
   onChange: (patch: Partial<RoofPlane>) => void
   onRemove: () => void
+  onDuplicate: () => void
 }
 
 const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] = [
@@ -17,7 +18,7 @@ const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] =
   { value: 'right',  icon: <AlignRight size={14} />,  label: 'Jobb' },
 ]
 
-export function PlaneCard({ plane, result, onChange, onRemove }: Props) {
+export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Props) {
   const valid = isPlaneValid(plane)
   const lengthMap = new Map<number, number>()
   for (const col of result.columns) {
@@ -35,9 +36,14 @@ export function PlaneCard({ plane, result, onChange, onRemove }: Props) {
     <div className={`relative rounded-2xl p-4 bg-white border shadow-sm transition-colors print:rounded-none print:border-0 print:p-0 print:shadow-none ${
       valid ? 'border-slate-200' : 'border-amber-300'
     }`}>
-      <button onClick={onRemove} className="absolute top-3 right-3 text-slate-300 hover:text-red-500 transition-colors print:hidden">
-        <Trash2 size={16} />
-      </button>
+      <div className="absolute top-3 right-3 flex items-center gap-1 print:hidden">
+        <button onClick={onDuplicate} title="Másolás" className="text-slate-300 hover:text-blue-500 transition-colors">
+          <Copy size={15} />
+        </button>
+        <button onClick={onRemove} title="Törlés" className="text-slate-300 hover:text-red-500 transition-colors">
+          <Trash2 size={15} />
+        </button>
+      </div>
 
       {/* Name — shown as heading in print */}
       <input

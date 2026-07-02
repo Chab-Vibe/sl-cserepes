@@ -13,9 +13,9 @@ export function ResultsSummary({ groups }: Props) {
 
   const handleCopy = () => {
     const lines = groups.map(g =>
-      `${g.lengthM.toFixed(3)} m-es lemez: ${g.totalSheets} db  (${g.planeNames.join(', ')})`
+      `${Math.round(g.lengthM * 1000)} mm\t${g.totalSheets} db`
     )
-    lines.push(`ÖSSZESEN: ${total} db`)
+    lines.push(`ÖSSZESEN\t${total} db`)
     navigator.clipboard.writeText(lines.join('\n'))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -35,32 +35,47 @@ export function ResultsSummary({ groups }: Props) {
         <h2 className="text-slate-800 font-semibold text-sm">Rendelési összesítő</h2>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs transition-colors print:hidden"
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-700 text-xs transition-colors"
         >
           {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
           {copied ? 'Másolva' : 'Másolás'}
         </button>
       </div>
 
-      <div className="space-y-2 text-sm">
-        {groups.map(g => (
-          <div key={g.lengthM} className="flex justify-between items-start">
-            <div>
-              <span className="text-slate-700 font-medium">{g.lengthM.toFixed(3)} m-es lemez</span>
-              {g.lengthM > SHEET.MAX_SINGLE_LENGTH_M && (
-                <span className="ml-1.5 text-rose-500 text-[10px] font-semibold align-middle">6M+</span>
-              )}
-              <div className="text-slate-400 text-xs">{g.planeNames.join(', ')}</div>
-            </div>
-            <span className="text-blue-600 font-bold text-base ml-4">{g.totalSheets} db</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
-        <span className="text-slate-500 text-sm">Összesen</span>
-        <span className="text-slate-800 font-bold text-xl">{total} db</span>
-      </div>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200 text-slate-500 text-xs">
+            <th className="text-left font-medium pb-1.5">Hossz</th>
+            <th className="text-right font-medium pb-1.5">Darabszám</th>
+            <th className="text-right font-medium pb-1.5 pl-3">Terület</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {groups.map(g => (
+            <tr key={g.lengthM}>
+              <td className="py-1.5 text-slate-700 font-medium">
+                {Math.round(g.lengthM * 1000)} mm
+                {g.lengthM > SHEET.MAX_SINGLE_LENGTH_M && (
+                  <span className="ml-1.5 text-rose-500 text-[10px] font-semibold">6M+</span>
+                )}
+              </td>
+              <td className="py-1.5 text-right text-blue-600 font-bold">{g.totalSheets} db</td>
+              <td className="py-1.5 text-right text-slate-400 text-xs pl-3">
+                {(g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M).toFixed(2)} m²
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-200">
+            <td className="pt-2 text-slate-500 text-sm font-medium">Összesen</td>
+            <td className="pt-2 text-right text-slate-800 font-bold text-lg">{total} db</td>
+            <td className="pt-2 text-right text-slate-400 text-xs pl-3">
+              {groups.reduce((s, g) => s + g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M, 0).toFixed(2)} m²
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   )
 }

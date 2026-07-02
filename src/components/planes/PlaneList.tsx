@@ -3,7 +3,7 @@ import { calculatePlane } from '../../utils/calculations'
 import { PlaneCard } from './PlaneCard'
 
 export function PlaneList() {
-  const { planes, allowOversize, updatePlane, removePlane } = useStore()
+  const { planes, allowOversize, updatePlane, removePlane, duplicatePlane } = useStore()
 
   if (planes.length === 0) {
     return (
@@ -22,6 +22,7 @@ export function PlaneList() {
           result={calculatePlane(plane, allowOversize)}
           onChange={patch => updatePlane(plane.id, patch)}
           onRemove={() => removePlane(plane.id)}
+          onDuplicate={() => duplicatePlane(plane.id)}
         />
       ))}
     </div>

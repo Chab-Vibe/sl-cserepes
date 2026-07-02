@@ -6,6 +6,7 @@ interface Store {
   planes: RoofPlane[]
   allowOversize: boolean
   addPlane: () => void
+  duplicatePlane: (id: string) => void
   updatePlane: (id: string, patch: Partial<RoofPlane>) => void
   removePlane: (id: string) => void
   setAllowOversize: (value: boolean) => void
@@ -26,6 +27,21 @@ export const useStore = create<Store>((set, get) => ({
       alignment: 'left',
     }
     const updated = [...planes, newPlane]
+    savePlanes(updated)
+    set({ planes: updated })
+  },
+
+  duplicatePlane: (id) => {
+    const planes = get().planes
+    const src = planes.find(p => p.id === id)
+    if (!src) return
+    const copy: RoofPlane = {
+      ...src,
+      id: crypto.randomUUID(),
+      name: `${src.name} (másolat)`,
+    }
+    const idx = planes.findIndex(p => p.id === id)
+    const updated = [...planes.slice(0, idx + 1), copy, ...planes.slice(idx + 1)]
     savePlanes(updated)
     set({ planes: updated })
   },
