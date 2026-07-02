@@ -45,13 +45,18 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         </button>
       </div>
 
-      {/* Name — shown as heading in print */}
-      <input
-        className="w-full bg-transparent text-slate-800 font-semibold text-sm mb-3 outline-none border-b border-slate-200 pb-1 pr-6 print:hidden focus:border-blue-400"
-        value={plane.name}
-        onChange={e => onChange({ name: e.target.value })}
-        placeholder="Sík neve"
-      />
+      {/* Sík neve */}
+      <div className="flex items-center gap-2 mb-3 pr-14 print:hidden">
+        <span className="text-slate-400 text-xs shrink-0">Név:</span>
+        <input
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-semibold text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+          value={plane.name}
+          onChange={e => onChange({ name: e.target.value })}
+          placeholder="Sík neve..."
+        />
+      </div>
+      {/* Nyomtatásban a név fejlécként jelenik meg */}
+      <div className="hidden print:block text-gray-900 font-bold text-sm mb-1">{plane.name}</div>
 
       {/* Polygon editor */}
       <div className="print:hidden">
