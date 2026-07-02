@@ -54,16 +54,15 @@ function maxHeightInColumn(points: [number, number][], colX1: number, colX2: num
   return maxY
 }
 
-// Adott nettó (csak modulokkal lefedendő) magassághoz megkeresi a minimális
-// modulszámot és a tényleges modulhosszt a BILKA rövid/hosszú modul
-// rugalmasság alapján (lásd Bilka-Module-07-01-2026_09_41_PM.png, Modul_35 fül,
-// 1. oszlop = rövid modul minimum, 4. oszlop = teljes modul).
+// Adott nettó magassághoz megkeresi a szükséges egész modulszámot.
+// A lemez mindig teljes 350 mm-es modulra kerekítve készül → lépcsős kiosztás.
+// Ha a magasság pontosan modulhatárra esik, +1 modult ad hozzá (5 cm védőzóna).
 function resolveModules(netH: number): { modules: number; moduleLenM: number } {
   if (netH <= 0) return { modules: 0, moduleLenM: 0 }
-  let n = Math.max(1, Math.ceil((netH - SHEET.MODULE_LONG_M) / SHEET.MODULE_M))
-  while (n * SHEET.MODULE_M + SHEET.MODULE_LONG_M < netH - 1e-9) n++
-  const shortMinM = n * SHEET.MODULE_M - SHEET.MODULE_SHORT_M
-  const moduleLenM = Math.max(netH, shortMinM)
+  let n = Math.ceil(netH / SHEET.MODULE_M)
+  if (n < 1) n = 1
+  if (Math.abs((netH % SHEET.MODULE_M + SHEET.MODULE_M) % SHEET.MODULE_M) < 1e-6) n++
+  const moduleLenM = n * SHEET.MODULE_M
   return { modules: n, moduleLenM: Math.round(moduleLenM * 1000) / 1000 }
 }
 
