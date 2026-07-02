@@ -170,13 +170,16 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           )
         }
 
-        const defaultTargetMm = existing
-          ? Math.round((col.bottomExtraM + existing.modules * SHEET.MODULE_M) * 1000)
+        // A ténylegesen alkalmazott (nyújtott/kerekített) hosszt az aktuális
+        // szegmensekből olvassuk ki, nem a nyers modul-képletből — így a mező
+        // Alkalmazás után a valódi gyártási méretet mutatja (pl. 750 → 820).
+        const defaultTargetMm = existing && col.segments.length === 2
+          ? Math.round(col.segments[0].lengthM * 1000)
           : Math.round((bounds.minMm + bounds.maxMm) / 2)
 
         return (
           <form
-            key={selectedCol}
+            key={`${selectedCol}-${existing ? defaultTargetMm : 'new'}`}
             onSubmit={e => {
               e.preventDefault()
               const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
