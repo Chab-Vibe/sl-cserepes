@@ -46,7 +46,6 @@ export function SheetLayout({ plane, result }: Props) {
 
   const polyPtStr = plane.points.map(([wx, wy]) => toSvg(wx, wy).join(',')).join(' ')
   const clipId = `lc-${plane.id}`
-  const HATCH_ID = `hatch-${plane.id}`
   const OVERLAP_HATCH_ID = `ohatch-${plane.id}`
 
   function colWorldX(col: PlaneResult['columns'][number]) {
@@ -75,15 +74,11 @@ export function SheetLayout({ plane, result }: Props) {
       <div className="rounded-xl overflow-hidden border border-slate-200 print:border-gray-300 print:rounded-none bg-white">
         <svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ background: 'white' }}>
           <defs>
-            {/* Hatch for overhang */}
-            <pattern id={HATCH_ID} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(45)">
-              <line x1={0} y1={0} x2={0} y2={6} stroke="#aaa" strokeWidth={1.2} />
-            </pattern>
             {/* Hatch for sheet-to-sheet overlap */}
             <pattern id={OVERLAP_HATCH_ID} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(-45)">
               <line x1={0} y1={0} x2={0} y2={6} stroke="#d97706" strokeWidth={1.4} />
             </pattern>
-            {/* Clip to polygon */}
+            {/* Clip to polygon (only for separator lines) */}
             <clipPath id={clipId}>
               <polygon points={polyPtStr} />
             </clipPath>
@@ -149,15 +144,6 @@ export function SheetLayout({ plane, result }: Props) {
                   )
                 })}
 
-                {/* Overhang hatch (outside polygon) */}
-                {leftOH > 0.001 && (
-                  <rect x={sx1} y={syTop} width={leftOH * scale} height={syBot - syTop}
-                    fill={`url(#${HATCH_ID})`} />
-                )}
-                {rightOH > 0.001 && (
-                  <rect x={sx2 - rightOH * scale} y={syTop} width={rightOH * scale} height={syBot - syTop}
-                    fill={`url(#${HATCH_ID})`} />
-                )}
               </g>
             )
           })}
