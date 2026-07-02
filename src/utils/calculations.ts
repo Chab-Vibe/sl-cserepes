@@ -83,41 +83,46 @@ function moduleFloor(relH: number): number {
   return Math.max(0, n)
 }
 
-// A BONA Plus modul-táblázat szerint 1 modulos lemez nincs; 2 modulnál a
-// 82 cm-es gyártási minimumot kell ellenőrizni, 3 modultól fölfelé viszont
-// mindig gyártható, méret-ellenőrzés nélkül.
-function minViableModules(otherLenM: number): number {
-  const twoModuleLenM = r3(otherLenM + 2 * SHEET.MODULE_M)
-  return twoModuleLenM >= SHEET.MIN_LENGTH_M - 1e-9 ? 2 : 3
+// Egy darab tényleges gyártási hossza adott alapmérethez (csurgó/átfedés,
+// esetleg +orr) és modulszámhoz. A BONA Plus tábla szerint 1 modulos lemez
+// nincs (legalább 2 modul mindig kell); 2 modulnál, ha a nyers hossz a 82
+// cm-es minimum alá esne, a darabot pontosan 82 cm-re NYÚJTJUK (nem lépünk
+// egy egész modult tovább). 3 modultól fölfelé a nyers hossz mindig eléri
+// a minimumot, így ott sosem kell nyújtani.
+function finalizeLength(otherLenM: number, modules: number): number {
+  const naturalM = r3(otherLenM + modules * SHEET.MODULE_M)
+  if (modules === 2 && naturalM < SHEET.MIN_LENGTH_M - 1e-9) return SHEET.MIN_LENGTH_M
+  return naturalM
 }
 
-// Megosztható-e egyáltalán az oszlop úgy, hogy mindkét darab gyártható legyen
-// (legalább 2 modul, és 2 modulnál a 82 cm-es minimumot is elérje).
-export function canSplitColumn(totalModules: number, bottomExtraM: number): boolean {
-  const kMin = minViableModules(bottomExtraM)
-  const kMax = totalModules - minViableModules(SHEET.OVERLAP_M + SHEET.NOSE_M)
-  return kMin <= kMax
+// Megosztható-e egyáltalán az oszlop úgy, hogy mindkét darabnak jusson
+// legalább 2-2 modul (a 82 cm-es minimumot a finalizeLength nyújtással úgyis
+// biztosítja, tehát csak a modulszám a korlát).
+export function canSplitColumn(totalModules: number): boolean {
+  return totalModules >= 4
 }
 
 // Az alsó darab megengedett hossztartománya (mm), amivel mindkét darab
 // gyártható marad. null, ha az oszlop egyáltalán nem osztható.
 export function splitBoundsMm(totalModules: number, bottomExtraM: number): { minMm: number; maxMm: number } | null {
-  if (!canSplitColumn(totalModules, bottomExtraM)) return null
-  const kMin = minViableModules(bottomExtraM)
-  const kMax = totalModules - minViableModules(SHEET.OVERLAP_M + SHEET.NOSE_M)
+  if (!canSplitColumn(totalModules)) return null
+  const kMax = totalModules - 2
   return {
-    minMm: Math.round((bottomExtraM + kMin * SHEET.MODULE_M) * 1000),
-    maxMm: Math.round((bottomExtraM + kMax * SHEET.MODULE_M) * 1000),
+    minMm: Math.round(finalizeLength(bottomExtraM, 2) * 1000),
+    maxMm: Math.round(finalizeLength(bottomExtraM, kMax) * 1000),
   }
 }
 
-// A megadott (mm-ben kért) alsó-darab-hosszhoz legközelebb eső érvényes
-// modulhatárt adja vissza, úgy hogy mindkét darab gyártható maradjon.
+// A megadott (mm-ben kért) alsó-darab-hosszhoz tartozó modulszámot adja
+// vissza. Ha a kért méret belefér a (nyújtott) 2 modulos darabba, azt
+// választja; egyébként felfelé kerekít a legközelebbi elérhető modulhatárra
+// (3 modultól nincs nyújtás, csak a szokásos modulrács).
 export function nearestSplitModules(totalModules: number, bottomExtraM: number, targetBottomM: number): number {
-  const kMin = minViableModules(bottomExtraM)
-  const kMax = Math.max(kMin, totalModules - minViableModules(SHEET.OVERLAP_M + SHEET.NOSE_M))
-  const raw = (targetBottomM - bottomExtraM) / SHEET.MODULE_M
-  return Math.min(kMax, Math.max(kMin, Math.round(raw)))
+  const kMax = totalModules - 2
+  const twoModuleLenM = finalizeLength(bottomExtraM, 2)
+  if (targetBottomM <= twoModuleLenM + 1e-9) return Math.min(2, kMax)
+  const k = Math.max(3, Math.ceil((targetBottomM - bottomExtraM) / SHEET.MODULE_M - 1e-9))
+  return Math.min(kMax, k)
 }
 
 // Adott modulszámú lemezoszlopból legyártható szegmenseket épít fel.
@@ -133,13 +138,13 @@ export function nearestSplitModules(totalModules: number, bottomExtraM: number, 
 function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, splitAtModules?: number): SheetSegment[] {
   if (totalModules <= 0) return []
 
-  const totalLenM = r3(bottomExtraM + totalModules * SHEET.MODULE_M + SHEET.NOSE_M)
+  const totalLenM = finalizeLength(bottomExtraM + SHEET.NOSE_M, totalModules)
   const needsAutoSplit = !allowOversize && totalLenM > SHEET.MAX_SINGLE_LENGTH_M + 1e-9
 
-  if (!needsAutoSplit && splitAtModules !== undefined && totalModules >= 2 && canSplitColumn(totalModules, bottomExtraM)) {
+  if (!needsAutoSplit && splitAtModules !== undefined && canSplitColumn(totalModules)) {
     const k = nearestSplitModules(totalModules, bottomExtraM, bottomExtraM + splitAtModules * SHEET.MODULE_M)
-    const lenA = r3(bottomExtraM + k * SHEET.MODULE_M)
-    const lenB = r3(SHEET.OVERLAP_M + (totalModules - k) * SHEET.MODULE_M + SHEET.NOSE_M)
+    const lenA = finalizeLength(bottomExtraM, k)
+    const lenB = finalizeLength(SHEET.OVERLAP_M + SHEET.NOSE_M, totalModules - k)
     return [
       { order: 0, modules: k, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
       { order: 1, modules: totalModules - k, lengthM: lenB, startM: r3(startYM + lenA - SHEET.OVERLAP_M), endM: r3(startYM + lenA - SHEET.OVERLAP_M + lenB) },
@@ -157,7 +162,7 @@ function buildSegments(totalModules: number, bottomExtraM: number, startYM: numb
 
   while (true) {
     const base = order === 0 ? bottomExtraM : SHEET.OVERLAP_M
-    const finishLenM = r3(base + remaining * SHEET.MODULE_M + SHEET.NOSE_M)
+    const finishLenM = finalizeLength(base + SHEET.NOSE_M, remaining)
 
     if (finishLenM <= SHEET.MAX_SINGLE_LENGTH_M + 1e-9) {
       segments.push({ order, modules: remaining, lengthM: finishLenM, startM: r3(cursorM), endM: r3(cursorM + finishLenM) })
@@ -166,13 +171,10 @@ function buildSegments(totalModules: number, bottomExtraM: number, startYM: numb
 
     // Nem fér ki egyben: ezt a darabot a lehető legtöbb teljes modullal
     // töltjük fel a 6 m-es határon belül (orr nélkül, hisz nem itt végződik),
-    // de annyi modult meghagyva a záró darabnak, hogy az is elérje a
-    // gyártási minimumot (MIN_LENGTH_M).
+    // de legalább 2 modult meghagyva a záró darabnak.
     const maxModulesInCap = Math.floor((SHEET.MAX_SINGLE_LENGTH_M - base) / SHEET.MODULE_M)
-    const minFinishModules = minViableModules(SHEET.OVERLAP_M + SHEET.NOSE_M)
-    let n = Math.min(remaining - 1, Math.max(1, maxModulesInCap))
-    if (remaining - n < minFinishModules) n = Math.max(1, remaining - minFinishModules)
-    const lenM = r3(base + n * SHEET.MODULE_M)
+    const n = Math.max(2, Math.min(remaining - 2, Math.max(2, maxModulesInCap)))
+    const lenM = finalizeLength(base, n)
     segments.push({ order, modules: n, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
 
     remaining -= n
@@ -247,10 +249,10 @@ export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneRe
     const nBot = raised ? moduleFloor(ext.minY - plane.eaveOverhangM) : 0
     const startY = raised ? plane.eaveOverhangM + nBot * SHEET.MODULE_M : 0
     const bottomExtra = raised ? 0 : plane.eaveOverhangM
-    // A legkisebb gyártható méret (MIN_LENGTH_M) betartásához legalább ennyi
-    // modul kell — nagyon rövid (pl. sarki) oszlopoknál ez felülírja a
-    // pusztán a magasságból számolt modulszámot.
-    const modules = Math.max(nTop - nBot, minViableModules(bottomExtra + SHEET.NOSE_M))
+    // Legalább 2 modul mindig kell (1 modulos lemez nincs); a 82 cm-es
+    // gyártási minimumot a finalizeLength nyújtással biztosítja, ha épp
+    // 2 modul jönne ki a magasságból.
+    const modules = Math.max(2, nTop - nBot)
 
     const manualSplit = manualSplits.find(s => s.col === i)
     const segments = buildSegments(modules, bottomExtra, startY, allowOversize, manualSplit?.modules)

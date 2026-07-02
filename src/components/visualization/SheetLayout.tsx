@@ -104,7 +104,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
             // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
             // 6 m fölötti magasság miatt automatikusan toldva, és a darab elég
             // hosszú ahhoz, hogy mindkét fele elérje a gyártási minimumot.
-            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(col.totalModules, col.bottomExtraM))
+            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(col.totalModules))
             const isSelected = selectedCol === col.index
             const colBottomM = col.segments.length ? col.segments[0].startM : 0
             const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
