@@ -180,6 +180,42 @@ export function SheetLayout({ plane, result }: Props) {
             )
           })}
 
+          {/* ── Edge length labels ── */}
+          {plane.points.map(([wx1, wy1], i) => {
+            const [wx2, wy2] = plane.points[(i + 1) % plane.points.length]
+            const [sx1, sy1] = toSvg(wx1, wy1)
+            const [sx2, sy2] = toSvg(wx2, wy2)
+            const mx = (sx1 + sx2) / 2
+            const my = (sy1 + sy2) / 2
+            // perpendicular offset (inward)
+            const dx = sx2 - sx1
+            const dy = sy2 - sy1
+            const len = Math.hypot(dx, dy)
+            const nx = -dy / len
+            const ny =  dx / len
+            const OFF = 11
+            const lx = mx + nx * OFF
+            const ly = my + ny * OFF
+            const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI
+            const rotate = Math.abs(angleDeg) > 90 ? angleDeg + 180 : angleDeg
+            const edgeLenMm = Math.round(Math.hypot(wx2 - wx1, wy2 - wy1) * 1000)
+            return (
+              <g key={`el${i}`}>
+                <rect
+                  x={lx - 17} y={ly - 6} width={34} height={11} rx={2} fill="white" opacity={0.85}
+                  transform={`rotate(${rotate},${lx},${ly})`}
+                />
+                <text
+                  x={lx} y={ly + 4} textAnchor="middle"
+                  fill="#1d4ed8" fontSize={9} fontFamily="Arial,sans-serif" fontWeight="bold"
+                  transform={`rotate(${rotate},${lx},${ly})`}
+                >
+                  {edgeLenMm}
+                </text>
+              </g>
+            )
+          })}
+
           {/* ── Polygon vertex dots ── */}
           {plane.points.map(([wx, wy], i) => {
             const [sx, sy] = toSvg(wx, wy)
