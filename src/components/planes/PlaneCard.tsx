@@ -14,9 +14,9 @@ interface Props {
 }
 
 const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] = [
-  { value: 'left',   icon: <AlignLeft size={14} />,   label: 'Bal' },
-  { value: 'center', icon: <AlignCenter size={14} />, label: 'Közép' },
-  { value: 'right',  icon: <AlignRight size={14} />,  label: 'Jobb' },
+  { value: 'left',   icon: <AlignLeft size={16} />,   label: 'Bal' },
+  { value: 'center', icon: <AlignCenter size={16} />, label: 'Közép' },
+  { value: 'right',  icon: <AlignRight size={16} />,  label: 'Jobb' },
 ]
 
 export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Props) {
@@ -54,16 +54,16 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
     }`}>
       <div className="absolute top-3 right-3 flex items-center gap-1 print:hidden">
         <button onClick={onDuplicate} title="Másolás" className="text-slate-300 hover:text-blue-500 transition-colors">
-          <Copy size={15} />
+          <Copy size={17} />
         </button>
         <button onClick={onRemove} title="Törlés" className="text-slate-300 hover:text-red-500 transition-colors">
-          <Trash2 size={15} />
+          <Trash2 size={17} />
         </button>
       </div>
 
       {/* Sík neve */}
       <div className="flex items-center gap-2 mb-3 pr-14 print:hidden">
-        <span className="text-slate-400 text-xs shrink-0">Név:</span>
+        <span className="text-slate-400 text-sm shrink-0">Név:</span>
         <input
           className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-semibold text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
           value={plane.name}
@@ -81,26 +81,26 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
 
       {/* Controls row: csurgó + igazítás */}
       <div className="flex items-center gap-4 mt-3 flex-wrap print:hidden">
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex items-center gap-2 text-sm">
           <span className="text-slate-500">Csurgó (m)</span>
           <input
             type="number" min={0} step={0.01}
             value={plane.eaveOverhangM || ''}
             onChange={e => onChange({ eaveOverhangM: parseFloat(e.target.value) || 0 })}
-            className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-800 text-xs outline-none focus:border-blue-400"
+            className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-800 text-sm outline-none focus:border-blue-400"
             placeholder="0.05"
           />
         </label>
 
         {/* Alignment toggle */}
         <div className="flex items-center gap-1">
-          <span className="text-slate-400 text-xs mr-1">Igazítás:</span>
+          <span className="text-slate-400 text-sm mr-1">Igazítás:</span>
           {ALIGN_OPTS.map(opt => (
             <button
               key={opt.value}
               title={opt.label}
               onClick={() => onChange({ alignment: opt.value })}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-sm transition-colors ${
                 plane.alignment === opt.value
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
@@ -113,7 +113,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         </div>
 
         {valid && (
-          <span className="text-slate-400 text-xs ml-auto">
+          <span className="text-slate-400 text-sm ml-auto">
             {w.toFixed(2)} m × {h.toFixed(2)} m
           </span>
         )}
@@ -123,14 +123,14 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
       {(splitCount > 0 || oversizeCount > 0) && (
         <div className="mt-3 flex flex-col gap-1.5 print:hidden">
           {splitCount > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-              <AlertTriangle size={13} className="shrink-0" />
+            <div className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              <AlertTriangle size={15} className="shrink-0" />
               {splitCount} oszlop toldva ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel)
             </div>
           )}
           {oversizeCount > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
-              <AlertTriangle size={13} className="shrink-0" />
+            <div className="flex items-center gap-1.5 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
+              <AlertTriangle size={15} className="shrink-0" />
               {oversizeCount} egybefüggő lemez 6 m fölött — egyeztess a gyártóval
             </div>
           )}
@@ -140,7 +140,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
       {/* Sheet layout drawing */}
       {valid && <SheetLayout plane={plane} result={result} onSelectColumn={selectColumn} selectedCol={selectedCol} />}
       {valid && (
-        <p className="text-slate-300 text-[10px] mt-1 print:hidden">
+        <p className="text-slate-300 text-xs mt-1 print:hidden">
           Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet, a rendszer a legközelebbi modulhoz igazítja.
         </p>
       )}
@@ -153,7 +153,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
 
         if (isAutoLocked) {
           return (
-            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center justify-between gap-2 print:hidden">
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
               <span>Ez az oszlop automatikusan toldva van (6 m fölötti magasság) — kézi megosztás nem szükséges.</span>
               <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
             </div>
@@ -163,7 +163,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         const bounds = splitBoundsMm(col.totalModules, col.bottomExtraM)
         if (!bounds) {
           return (
-            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center justify-between gap-2 print:hidden">
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
               <span>Ez a lemez túl rövid ahhoz, hogy két, a {Math.round(SHEET.MIN_LENGTH_M * 1000)} mm-es gyártási minimumot elérő darabra osztható legyen.</span>
               <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
             </div>
@@ -185,7 +185,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
               const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
               if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, col, mm)
             }}
-            className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-xs print:hidden"
+            className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-sm print:hidden"
           >
             <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
             <input
@@ -212,7 +212,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
       {/* Result summary */}
       {valid && lengthEntries.length > 0 && (
         <div className="mt-3 pt-3 border-t border-slate-100 print:hidden">
-          <div className="flex gap-4 flex-wrap text-xs">
+          <div className="flex gap-4 flex-wrap text-sm">
             {lengthEntries.map(([len, cnt]) => (
               <div key={len}>
                 <span className="text-slate-500">{len.toFixed(3)} m: </span>
@@ -227,7 +227,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         </div>
       )}
       {!valid && (
-        <p className="text-amber-600 text-xs mt-2">Adj meg legalább 3 pontot a sokszöghöz.</p>
+        <p className="text-amber-600 text-sm mt-2">Adj meg legalább 3 pontot a sokszöghöz.</p>
       )}
     </div>
   )

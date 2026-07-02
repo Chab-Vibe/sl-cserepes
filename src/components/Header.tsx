@@ -15,22 +15,22 @@ export function Header() {
     <header className="py-4 print:hidden">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-slate-800 font-bold text-lg leading-tight">Cserepeslemez Kalkulátor</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-slate-800 font-bold text-xl leading-tight">Cserepeslemez Kalkulátor</h1>
+          <p className="text-slate-400 text-sm mt-0.5">
             Hasznos szélesség: {SHEET.EFFECTIVE_WIDTH_M * 1000} mm · Modul osztás: {SHEET.MODULE_M * 1000} mm · Orr: {SHEET.NOSE_M * 1000} mm
           </p>
         </div>
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-xs transition-colors"
+          className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 text-sm transition-colors"
         >
-          <RotateCcw size={13} />
+          <RotateCcw size={15} />
           Törlés
         </button>
       </div>
 
       <label className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-white border border-slate-200 shadow-sm px-3.5 py-2.5 cursor-pointer select-none">
-        <span className="text-xs text-slate-600 leading-snug">
+        <span className="text-sm text-slate-600 leading-snug">
           <span className="font-medium text-slate-800">Egybefüggő lemez engedélyezése 6 m fölött</span>
           <br />
           <span className="text-slate-400">Ha ki van kapcsolva, a 6 m-nél magasabb oszlopok automatikusan toldva lesznek ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel).</span>

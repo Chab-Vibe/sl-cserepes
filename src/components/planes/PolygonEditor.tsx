@@ -6,9 +6,9 @@ interface Props {
   onChange: (points: [number, number][]) => void
 }
 
-const CW = 320
-const CH = 200
-const PAD = { top: 16, right: 16, bottom: 24, left: 32 }
+const CW = 340
+const CH = 210
+const PAD = { top: 16, right: 16, bottom: 26, left: 34 }
 const DW = CW - PAD.left - PAD.right
 const DH = CH - PAD.top - PAD.bottom
 
@@ -52,7 +52,7 @@ export function PolygonEditor({ points, onChange }: Props) {
     gridLines.push(
       <line key={`gx${x}`} x1={sx} y1={PAD.top} x2={sx} y2={PAD.top + DH}
         stroke={isOrigin ? 'rgba(15,23,42,0.22)' : 'rgba(15,23,42,0.06)'} strokeWidth={isOrigin ? 1.2 : 1} />,
-      <text key={`tx${x}`} x={sx} y={PAD.top + DH + 13} textAnchor="middle" fill="rgba(15,23,42,0.32)" fontSize={8}>{x}m</text>
+      <text key={`tx${x}`} x={sx} y={PAD.top + DH + 15} textAnchor="middle" fill="rgba(15,23,42,0.4)" fontSize={10}>{x}m</text>
     )
   }
   for (let y = Math.floor(ext.minY); y <= Math.ceil(ext.maxY); y++) {
@@ -62,7 +62,7 @@ export function PolygonEditor({ points, onChange }: Props) {
     gridLines.push(
       <line key={`gy${y}`} x1={PAD.left} y1={sy} x2={PAD.left + DW} y2={sy}
         stroke={isOrigin ? 'rgba(15,23,42,0.22)' : 'rgba(15,23,42,0.06)'} strokeWidth={isOrigin ? 1.2 : 1} />,
-      <text key={`ty${y}`} x={PAD.left - 4} y={sy + 3} textAnchor="end" fill="rgba(15,23,42,0.32)" fontSize={8}>{y}m</text>
+      <text key={`ty${y}`} x={PAD.left - 4} y={sy + 3} textAnchor="end" fill="rgba(15,23,42,0.4)" fontSize={10}>{y}m</text>
     )
   }
 
@@ -88,24 +88,24 @@ export function PolygonEditor({ points, onChange }: Props) {
 
         {svgPts.map(([sx, sy], i) => (
           <g key={i}>
-            <circle cx={sx} cy={sy} r={5}
+            <circle cx={sx} cy={sy} r={6}
               fill={i === 0 ? 'rgba(16,185,129,0.9)' : 'rgba(37,99,235,0.85)'}
-              stroke="white" strokeWidth={1.2}
+              stroke="white" strokeWidth={1.4}
             />
-            <text x={sx + 7} y={sy - 4} fill="rgba(15,23,42,0.55)" fontSize={8}>{i + 1}</text>
+            <text x={sx + 8} y={sy - 5} fill="rgba(15,23,42,0.65)" fontSize={10} fontWeight="600">{i + 1}</text>
           </g>
         ))}
 
         {points.length === 0 && (
-          <text x={CW / 2} y={CH / 2} textAnchor="middle" fill="rgba(15,23,42,0.25)" fontSize={10}>
+          <text x={CW / 2} y={CH / 2} textAnchor="middle" fill="rgba(15,23,42,0.3)" fontSize={12}>
             Add meg a pontokat alul
           </text>
         )}
       </svg>
 
       {/* Coordinate table */}
-      <div className="mt-2 text-xs">
-        <div className="grid grid-cols-[1.2rem_1fr_1fr_1.4rem] gap-x-2 gap-y-1.5 items-center">
+      <div className="mt-2 text-sm">
+        <div className="grid grid-cols-[1.4rem_1fr_1fr_1.6rem] gap-x-2 gap-y-1.5 items-center">
           <span className="text-slate-400 text-center">#</span>
           <span className="text-slate-400">X (m) — szélesség</span>
           <span className="text-slate-400">Y (m) — magasság</span>
@@ -123,7 +123,7 @@ export function PolygonEditor({ points, onChange }: Props) {
                   const parsed = parseFloat(raw)
                   if (!Number.isNaN(parsed)) updateX(i, parsed)
                 }}
-                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400 w-full"
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-800 outline-none focus:border-blue-400 w-full"
               />
               <input
                 type="number" step={0.1}
@@ -135,10 +135,10 @@ export function PolygonEditor({ points, onChange }: Props) {
                   const parsed = parseFloat(raw)
                   if (!Number.isNaN(parsed)) updateY(i, parsed)
                 }}
-                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400 w-full"
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-800 outline-none focus:border-blue-400 w-full"
               />
               <button onClick={() => deletePoint(i)} className="text-slate-300 hover:text-red-500 transition-colors flex justify-center">
-                <Trash2 size={12} />
+                <Trash2 size={14} />
               </button>
             </Fragment>
           ))}
@@ -147,16 +147,16 @@ export function PolygonEditor({ points, onChange }: Props) {
         <div className="flex gap-3 mt-2">
           <button
             onClick={addPoint}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-xs transition-colors"
+            className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm transition-colors"
           >
-            <Plus size={13} /> Új pont
+            <Plus size={15} /> Új pont
           </button>
           {points.length > 0 && (
             <button
               onClick={() => onChange([])}
-              className="flex items-center gap-1 text-slate-300 hover:text-red-500 text-xs transition-colors ml-auto"
+              className="flex items-center gap-1 text-slate-300 hover:text-red-500 text-sm transition-colors ml-auto"
             >
-              <Trash2 size={12} /> Törlés
+              <Trash2 size={14} /> Törlés
             </button>
           )}
         </div>
