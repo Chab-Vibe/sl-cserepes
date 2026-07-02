@@ -6,10 +6,16 @@ interface Props {
   result: PlaneResult
   onSelectColumn?: (colIndex: number) => void
   selectedCol?: number | null
+  // Kozmetikai (betűméret/jelölésméret) szorzó — a geometria (SVG_W/H, PAD,
+  // lépték) mindig ugyanaz marad, hogy a nyomtatott kép változatlan legyen;
+  // csak a képernyős nézet kaphat nagyobb feliratokat ezzel a prop-pal.
+  fontScale?: number
 }
 
-export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null }: Props) {
+export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null, fontScale = 1 }: Props) {
   if (plane.points.length < 3 || result.columns.length === 0) return null
+
+  const FS = fontScale
 
   const minX = polyMinX(plane.points)
   const maxX = polyMaxX(plane.points) || 1
@@ -21,10 +27,10 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
   const overhangRight = Math.max(0, startX + totalSheetW - maxX)
   const manualSplits = plane.manualSplits ?? []
 
-  // Drawing canvas
-  const SVG_W = 620
-  const SVG_H = 420
-  const PAD = { top: 42, right: 92, bottom: 78, left: 66 }
+  // Drawing canvas — fix méret, a nyomtatott kép ettől nem függ a fontScale-től.
+  const SVG_W = 700
+  const SVG_H = 440
+  const PAD = { top: 40, right: 60, bottom: 70, left: 60 }
   const DW = SVG_W - PAD.left - PAD.right
   const DH = SVG_H - PAD.top - PAD.bottom
 
@@ -49,8 +55,8 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
   }
 
   const polyPtStr = plane.points.map(([wx, wy]) => toSvg(wx, wy).join(',')).join(' ')
-  const clipId = `lc-${plane.id}`
-  const OVERLAP_HATCH_ID = `ohatch-${plane.id}`
+  const clipId = `lc-${plane.id}-${fontScale}`
+  const OVERLAP_HATCH_ID = `ohatch-${plane.id}-${fontScale}`
 
   function colWorldX(col: PlaneResult['columns'][number]) {
     const x1 = startX + col.index * SHEET.EFFECTIVE_WIDTH_M
@@ -89,7 +95,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           </defs>
 
           {/* ── Title ── */}
-          <text x={SVG_W / 2} y={22} textAnchor="middle" fill="#333" fontSize={14} fontFamily="Arial,sans-serif" fontWeight="bold">
+          <text x={SVG_W / 2} y={16} textAnchor="middle" fill="#333" fontSize={10 * FS} fontFamily="Arial,sans-serif" fontWeight="bold">
             {plane.name}  ·  Igazítás: {alignLabel}  ·  Modul: {SHEET.MODULE_M * 1000} mm  ·  Hasznos szélesség: {SHEET.EFFECTIVE_WIDTH_M * 1000} mm
           </text>
 
@@ -123,14 +129,13 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
                   return (
                     <g key={seg.order}>
                       <rect x={sx1} y={segSyTop} width={colPx} height={segH}
-                        fill={isSelected ? '#eff6ff' : 'white'} stroke={isSelected ? '#2563eb' : '#888'} strokeWidth={isSelected ? 1.8 : 1} />
-                      {colPx > 12 && segH > 14 && (
+                        fill={isSelected ? '#eff6ff' : 'white'} stroke={isSelected ? '#2563eb' : '#888'} strokeWidth={isSelected ? 1.4 : 0.8} />
+                      {colPx > 14 && segH > 12 && (
                         <text
                           x={cx} y={cySeg}
                           textAnchor="middle" dominantBaseline="middle"
                           fill="#111"
-                          fontSize={colPx > 40 ? 15 : colPx > 22 ? 12 : 9}
-                          fontWeight="600"
+                          fontSize={(colPx > 40 ? 11 : colPx > 22 ? 9 : 7) * FS}
                           fontFamily="Arial,sans-serif"
                           transform={`rotate(-90,${cx},${cySeg})`}
                         >
@@ -170,7 +175,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           })}
 
           {/* ── Polygon outline (dotted, on top of columns) ── */}
-          <polygon points={polyPtStr} fill="none" stroke="#000" strokeWidth={1.6} strokeDasharray="6 5" />
+          <polygon points={polyPtStr} fill="none" stroke="#000" strokeWidth={1.2} strokeDasharray="5 4" />
 
           {/* ── Column separator lines (clipped inside polygon) ── */}
           {result.columns.map((col) => {
@@ -182,7 +187,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
             return (
               <line key={`sep${col.index}`}
                 x1={sx} y1={syT} x2={sx} y2={syB}
-                stroke="#555" strokeWidth={1}
+                stroke="#555" strokeWidth={0.7}
                 clipPath={`url(#${clipId})`} />
             )
           })}
@@ -200,7 +205,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
             const len = Math.hypot(dx, dy)
             const nx = -dy / len
             const ny =  dx / len
-            const OFF = 15
+            const OFF = 11 * FS
             const lx = mx + nx * OFF
             const ly = my + ny * OFF
             const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI
@@ -209,12 +214,12 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
             return (
               <g key={`el${i}`}>
                 <rect
-                  x={lx - 23} y={ly - 8} width={46} height={15} rx={3} fill="white" opacity={0.9}
+                  x={lx - 17 * FS} y={ly - 6 * FS} width={34 * FS} height={11 * FS} rx={2} fill="white" opacity={0.85}
                   transform={`rotate(${rotate},${lx},${ly})`}
                 />
                 <text
-                  x={lx} y={ly + 5} textAnchor="middle"
-                  fill="#1d4ed8" fontSize={12} fontFamily="Arial,sans-serif" fontWeight="bold"
+                  x={lx} y={ly + 4 * FS} textAnchor="middle"
+                  fill="#1d4ed8" fontSize={9 * FS} fontFamily="Arial,sans-serif" fontWeight="bold"
                   transform={`rotate(${rotate},${lx},${ly})`}
                 >
                   {edgeLenMm}
@@ -226,7 +231,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           {/* ── Polygon vertex dots ── */}
           {plane.points.map(([wx, wy], i) => {
             const [sx, sy] = toSvg(wx, wy)
-            return <circle key={i} cx={sx} cy={sy} r={5} fill="#000" />
+            return <circle key={i} cx={sx} cy={sy} r={4} fill="#000" />
           })}
 
           {/* ── Eave overhang line ── */}
@@ -241,18 +246,18 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           {(() => {
             const [px0, py0] = toSvg(minX, 0)
             const [px1]      = toSvg(maxX, 0)
-            const dy = py0 + 36
+            const dy = py0 + 28
             return (
               <g>
-                <line x1={px0} y1={dy} x2={px1} y2={dy} stroke="#1d4ed8" strokeWidth={1.3} />
-                <line x1={px0} y1={dy - 6} x2={px0} y2={dy + 6} stroke="#1d4ed8" strokeWidth={1.3} />
-                <line x1={px1} y1={dy - 6} x2={px1} y2={dy + 6} stroke="#1d4ed8" strokeWidth={1.3} />
+                <line x1={px0} y1={dy} x2={px1} y2={dy} stroke="#1d4ed8" strokeWidth={1} />
+                <line x1={px0} y1={dy - 5} x2={px0} y2={dy + 5} stroke="#1d4ed8" strokeWidth={1} />
+                <line x1={px1} y1={dy - 5} x2={px1} y2={dy + 5} stroke="#1d4ed8" strokeWidth={1} />
                 {/* leader from baseline */}
-                <line x1={px0} y1={py0} x2={px0} y2={dy} stroke="#bbb" strokeWidth={0.6} strokeDasharray="2 3" />
-                <line x1={px1} y1={py0} x2={px1} y2={dy} stroke="#bbb" strokeWidth={0.6} strokeDasharray="2 3" />
-                <rect x={(px0 + px1) / 2 - 30} y={dy - 10} width={60} height={18} rx={3} fill="white" />
-                <text x={(px0 + px1) / 2} y={dy + 5} textAnchor="middle"
-                  fill="#1d4ed8" fontSize={14} fontWeight="bold" fontFamily="Arial,sans-serif">
+                <line x1={px0} y1={py0} x2={px0} y2={dy} stroke="#bbb" strokeWidth={0.5} strokeDasharray="2 3" />
+                <line x1={px1} y1={py0} x2={px1} y2={dy} stroke="#bbb" strokeWidth={0.5} strokeDasharray="2 3" />
+                <rect x={(px0 + px1) / 2 - 24 * FS} y={dy - 8 * FS} width={48 * FS} height={14 * FS} rx={2} fill="white" />
+                <text x={(px0 + px1) / 2} y={dy + 4 * FS} textAnchor="middle"
+                  fill="#1d4ed8" fontSize={11 * FS} fontWeight="bold" fontFamily="Arial,sans-serif">
                   {totalWidthMm}
                 </text>
               </g>
@@ -263,15 +268,15 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           {totalSheetWidthMm !== totalWidthMm && (() => {
             const [sx0, sy0] = toSvg(startX, 0)
             const [sx1]      = toSvg(startX + totalSheetW, 0)
-            const dy = sy0 + 62
+            const dy = sy0 + 50
             return (
               <g>
-                <line x1={sx0} y1={dy} x2={sx1} y2={dy} stroke="#555" strokeWidth={1} />
-                <line x1={sx0} y1={dy - 5} x2={sx0} y2={dy + 5} stroke="#555" strokeWidth={1} />
-                <line x1={sx1} y1={dy - 5} x2={sx1} y2={dy + 5} stroke="#555" strokeWidth={1} />
-                <rect x={(sx0 + sx1) / 2 - 28} y={dy - 9} width={56} height={16} rx={3} fill="white" />
-                <text x={(sx0 + sx1) / 2} y={dy + 4} textAnchor="middle"
-                  fill="#555" fontSize={12} fontFamily="Arial,sans-serif">
+                <line x1={sx0} y1={dy} x2={sx1} y2={dy} stroke="#555" strokeWidth={0.8} />
+                <line x1={sx0} y1={dy - 4} x2={sx0} y2={dy + 4} stroke="#555" strokeWidth={0.8} />
+                <line x1={sx1} y1={dy - 4} x2={sx1} y2={dy + 4} stroke="#555" strokeWidth={0.8} />
+                <rect x={(sx0 + sx1) / 2 - 22 * FS} y={dy - 7 * FS} width={44 * FS} height={12 * FS} rx={2} fill="white" />
+                <text x={(sx0 + sx1) / 2} y={dy + 3 * FS} textAnchor="middle"
+                  fill="#555" fontSize={9 * FS} fontFamily="Arial,sans-serif">
                   {totalSheetWidthMm}
                 </text>
               </g>
@@ -282,17 +287,17 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
           {(() => {
             const [, yBot] = toSvg(0, 0)
             const [, yTop] = toSvg(0, maxY)
-            const dx = ox - 36
+            const dx = ox - 28
             const hMm = Math.round(maxY * 1000)
             const my = (yBot + yTop) / 2
             return (
               <g>
-                <line x1={dx} y1={yBot} x2={dx} y2={yTop} stroke="#555" strokeWidth={1} />
-                <line x1={dx - 5} y1={yBot} x2={dx + 5} y2={yBot} stroke="#555" strokeWidth={1} />
-                <line x1={dx - 5} y1={yTop} x2={dx + 5} y2={yTop} stroke="#555" strokeWidth={1} />
-                <rect x={dx - 26} y={my - 9} width={52} height={17} rx={3} fill="white" />
-                <text x={dx} y={my + 5} textAnchor="middle"
-                  fill="#555" fontSize={13} fontFamily="Arial,sans-serif"
+                <line x1={dx} y1={yBot} x2={dx} y2={yTop} stroke="#555" strokeWidth={0.8} />
+                <line x1={dx - 4} y1={yBot} x2={dx + 4} y2={yBot} stroke="#555" strokeWidth={0.8} />
+                <line x1={dx - 4} y1={yTop} x2={dx + 4} y2={yTop} stroke="#555" strokeWidth={0.8} />
+                <rect x={dx - 20 * FS} y={my - 7 * FS} width={40 * FS} height={13 * FS} rx={2} fill="white" />
+                <text x={dx} y={my + 4 * FS} textAnchor="middle"
+                  fill="#555" fontSize={10 * FS} fontFamily="Arial,sans-serif"
                   transform={`rotate(-90,${dx},${my})`}>{hMm}</text>
               </g>
             )
@@ -300,19 +305,19 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
 
           {/* ── Legend (bottom-right) ── */}
           {(() => {
-            const legendX = SVG_W - PAD.right + 6
-            const legendY0 = SVG_H - 14
+            const legendX = SVG_W - PAD.right + 4
+            const legendY0 = SVG_H - 10
             return (
               <g>
                 {uniqueLengths.map((len, i) => {
                   const cnt = allSegments.filter(s => s.lengthM === len).length
                   const seg = allSegments.find(s => s.lengthM === len)!
-                  const ly = legendY0 - (uniqueLengths.length - 1 - i) * 19
+                  const ly = legendY0 - (uniqueLengths.length - 1 - i) * 14 * FS
                   const overLimit = len > SHEET.MAX_SINGLE_LENGTH_M
                   return (
                     <g key={len}>
-                      <rect x={legendX} y={ly - 11} width={12} height={12} fill={overLimit ? '#fecaca' : '#ddd'} stroke={overLimit ? '#dc2626' : '#888'} strokeWidth={0.8} rx={2} />
-                      <text x={legendX + 17} y={ly} fill="#333" fontSize={11.5} fontFamily="Arial,sans-serif">
+                      <rect x={legendX} y={ly - 9 * FS} width={9 * FS} height={9 * FS} fill={overLimit ? '#fecaca' : '#ddd'} stroke={overLimit ? '#dc2626' : '#888'} strokeWidth={0.6} rx={1} />
+                      <text x={legendX + 13 * FS} y={ly} fill="#333" fontSize={8.5 * FS} fontFamily="Arial,sans-serif">
                         {Math.round(len * 1000)} mm — {cnt} db  ({seg.modules}×350+{Math.round((len - seg.modules * SHEET.MODULE_M) * 1000)})
                       </text>
                     </g>

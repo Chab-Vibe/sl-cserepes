@@ -137,8 +137,18 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         </div>
       )}
 
-      {/* Sheet layout drawing */}
-      {valid && <SheetLayout plane={plane} result={result} onSelectColumn={selectColumn} selectedCol={selectedCol} />}
+      {/* Sheet layout drawing — képernyőn nagyobb betűkkel, nyomtatva az
+          eredeti (változatlan) mérettel */}
+      {valid && (
+        <div className="print:hidden">
+          <SheetLayout plane={plane} result={result} onSelectColumn={selectColumn} selectedCol={selectedCol} fontScale={1.4} />
+        </div>
+      )}
+      {valid && (
+        <div className="hidden print:block">
+          <SheetLayout plane={plane} result={result} />
+        </div>
+      )}
       {valid && (
         <p className="text-slate-300 text-xs mt-1 print:hidden">
           Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet, a rendszer a legközelebbi modulhoz igazítja.
