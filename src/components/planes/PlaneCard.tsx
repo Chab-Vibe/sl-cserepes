@@ -3,7 +3,7 @@ import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
-import { isPlaneValid, polyWidth, polyHeight, nearestSplitModules, SHEET } from '../../utils/calculations'
+import { isPlaneValid, polyWidth, polyHeight, nearestSplitModules, splitBoundsMm, SHEET } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
@@ -160,10 +160,19 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           )
         }
 
-        const naturalTotalMm = Math.round((col.bottomExtraM + col.totalModules * SHEET.MODULE_M + SHEET.NOSE_M) * 1000)
+        const bounds = splitBoundsMm(col.totalModules, col.bottomExtraM)
+        if (!bounds) {
+          return (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center justify-between gap-2 print:hidden">
+              <span>Ez a lemez túl rövid ahhoz, hogy két, a {Math.round(SHEET.MIN_LENGTH_M * 1000)} mm-es gyártási minimumot elérő darabra osztható legyen.</span>
+              <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
+            </div>
+          )
+        }
+
         const defaultTargetMm = existing
           ? Math.round((col.bottomExtraM + existing.modules * SHEET.MODULE_M) * 1000)
-          : Math.round(naturalTotalMm / 2)
+          : Math.round((bounds.minMm + bounds.maxMm) / 2)
 
         return (
           <form
@@ -177,11 +186,11 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           >
             <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
             <input
-              name="mm" type="number" step={10} min={50} max={naturalTotalMm - 50}
+              name="mm" type="number" step={10} min={bounds.minMm} max={bounds.maxMm}
               defaultValue={defaultTargetMm}
               className="w-24 bg-white border border-blue-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400"
             />
-            <span className="text-blue-400">mm</span>
+            <span className="text-blue-400">mm ({bounds.minMm}–{bounds.maxMm} között)</span>
             <button type="submit" className="px-2.5 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
               Alkalmaz
             </button>

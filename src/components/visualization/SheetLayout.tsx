@@ -1,5 +1,5 @@
 import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
-import { polyMinX, polyMaxX, polyHeight, SHEET, getStartOffset } from '../../utils/calculations'
+import { polyMinX, polyMaxX, polyHeight, SHEET, getStartOffset, canSplitColumn } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
@@ -102,8 +102,9 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null 
             const cx = (sx1 + sx2) / 2
             const isManualSplit = manualSplits.some(s => s.col === col.index)
             // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
-            // 6 m fölötti magasság miatt automatikusan toldva.
-            const isSelectable = col.segments.length === 1 || isManualSplit
+            // 6 m fölötti magasság miatt automatikusan toldva, és a darab elég
+            // hosszú ahhoz, hogy mindkét fele elérje a gyártási minimumot.
+            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(col.totalModules, col.bottomExtraM))
             const isSelected = selectedCol === col.index
             const colBottomM = col.segments.length ? col.segments[0].startM : 0
             const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
