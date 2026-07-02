@@ -11,6 +11,7 @@ interface Store {
   removePlane: (id: string) => void
   setAllowOversize: (value: boolean) => void
   reset: () => void
+  importProject: (data: { planes: RoofPlane[]; allowOversize: boolean }) => void
 }
 
 export const useStore = create<Store>((set, get) => ({
@@ -66,5 +67,11 @@ export const useStore = create<Store>((set, get) => ({
   reset: () => {
     savePlanes([])
     set({ planes: [] })
+  },
+
+  importProject: (data) => {
+    savePlanes(data.planes)
+    saveAllowOversize(data.allowOversize)
+    set({ planes: data.planes, allowOversize: data.allowOversize })
   },
 }))
