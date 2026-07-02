@@ -189,7 +189,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           >
             <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
             <input
-              name="mm" type="number" step={10} min={bounds.minMm} max={bounds.maxMm}
+              name="mm" type="number"
               defaultValue={defaultTargetMm}
               className="w-24 bg-white border border-blue-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400"
             />
