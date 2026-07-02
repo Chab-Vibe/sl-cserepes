@@ -95,12 +95,6 @@ export function SheetLayout({ plane, result }: Props) {
             const [sx1] = toSvg(wx1, 0)
             const [sx2] = toSvg(wx2, 0)
             const colPx = sx2 - sx1
-            const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
-            const [, syTop] = toSvg(wx1, colTopM)
-            const [, syBot] = toSvg(wx1, 0)
-
-            const leftOH  = Math.max(0, 0 - wx1)
-            const rightOH = Math.max(0, wx2 - maxX)
             const cx = (sx1 + sx2) / 2
 
             return (
@@ -292,7 +286,7 @@ export function SheetLayout({ plane, result }: Props) {
                     <g key={len}>
                       <rect x={legendX} y={ly - 9} width={9} height={9} fill={overLimit ? '#fecaca' : '#ddd'} stroke={overLimit ? '#dc2626' : '#888'} strokeWidth={0.6} rx={1} />
                       <text x={legendX + 13} y={ly} fill="#333" fontSize={8.5} fontFamily="Arial,sans-serif">
-                        {Math.round(len * 1000)} mm — {cnt} db  ({seg.modules}×350{seg.order === 0 ? `+50+${Math.round(plane.eaveOverhangM * 1000)}` : ''})
+                        {Math.round(len * 1000)} mm — {cnt} db  ({seg.modules}×350+{Math.round((len - seg.modules * SHEET.MODULE_M) * 1000)})
                       </text>
                     </g>
                   )
