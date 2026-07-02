@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 'lucide-react'
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
-import { isPlaneValid, polyWidth, polyHeight, SHEET } from '../../utils/calculations'
+import { isPlaneValid, polyWidth, polyHeight, nearestSplitModules, SHEET } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
@@ -20,6 +21,8 @@ const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] =
 
 export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Props) {
   const valid = isPlaneValid(plane)
+  const [selectedCol, setSelectedCol] = useState<number | null>(null)
+
   const lengthMap = new Map<number, number>()
   for (const col of result.columns) {
     for (const seg of col.segments) {
@@ -32,10 +35,17 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
   const splitCount = result.columns.filter(c => c.isSplit).length
   const oversizeCount = result.columns.filter(c => c.segments.some(s => s.lengthM > SHEET.MAX_SINGLE_LENGTH_M)).length
 
-  const toggleColumnSplit = (colIndex: number) => {
-    const cur = plane.manualSplitCols ?? []
-    const next = cur.includes(colIndex) ? cur.filter(i => i !== colIndex) : [...cur, colIndex]
-    onChange({ manualSplitCols: next })
+  const selectColumn = (colIndex: number) => setSelectedCol(prev => prev === colIndex ? null : colIndex)
+  const selectedColResult = selectedCol !== null ? result.columns.find(c => c.index === selectedCol) : undefined
+
+  const applySplit = (colIndex: number, col: PlaneResult['columns'][number], mm: number) => {
+    const modules = nearestSplitModules(col.totalModules, col.bottomExtraM, mm / 1000)
+    const others = (plane.manualSplits ?? []).filter(s => s.col !== colIndex)
+    onChange({ manualSplits: [...others, { col: colIndex, modules }] })
+  }
+  const removeSplit = (colIndex: number) => {
+    const others = (plane.manualSplits ?? []).filter(s => s.col !== colIndex)
+    onChange({ manualSplits: others })
   }
 
   return (
@@ -128,12 +138,64 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
       )}
 
       {/* Sheet layout drawing */}
-      {valid && <SheetLayout plane={plane} result={result} onToggleColumnSplit={toggleColumnSplit} />}
+      {valid && <SheetLayout plane={plane} result={result} onSelectColumn={selectColumn} selectedCol={selectedCol} />}
       {valid && (
         <p className="text-slate-300 text-[10px] mt-1 print:hidden">
-          Kattints egy lemezre a rajzon a kézi megosztásához (legközelebbi modulnál, {Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel).
+          Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet, a rendszer a legközelebbi modulhoz igazítja.
         </p>
       )}
+
+      {/* Manual split editor panel */}
+      {valid && selectedCol !== null && selectedColResult && (() => {
+        const col = selectedColResult
+        const isAutoLocked = col.segments.length > 1 && !plane.manualSplits?.some(s => s.col === selectedCol)
+        const existing = plane.manualSplits?.find(s => s.col === selectedCol)
+
+        if (isAutoLocked) {
+          return (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center justify-between gap-2 print:hidden">
+              <span>Ez az oszlop automatikusan toldva van (6 m fölötti magasság) — kézi megosztás nem szükséges.</span>
+              <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
+            </div>
+          )
+        }
+
+        const naturalTotalMm = Math.round((col.bottomExtraM + col.totalModules * SHEET.MODULE_M + SHEET.NOSE_M) * 1000)
+        const defaultTargetMm = existing
+          ? Math.round((col.bottomExtraM + existing.modules * SHEET.MODULE_M) * 1000)
+          : Math.round(naturalTotalMm / 2)
+
+        return (
+          <form
+            key={selectedCol}
+            onSubmit={e => {
+              e.preventDefault()
+              const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
+              if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, col, mm)
+            }}
+            className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-xs print:hidden"
+          >
+            <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
+            <input
+              name="mm" type="number" step={10} min={50} max={naturalTotalMm - 50}
+              defaultValue={defaultTargetMm}
+              className="w-24 bg-white border border-blue-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400"
+            />
+            <span className="text-blue-400">mm</span>
+            <button type="submit" className="px-2.5 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+              Alkalmaz
+            </button>
+            {existing && (
+              <button type="button" onClick={() => removeSplit(selectedCol)} className="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-500 hover:text-red-500 transition-colors">
+                Egyesítés
+              </button>
+            )}
+            <button type="button" onClick={() => setSelectedCol(null)} className="ml-auto text-blue-400 hover:text-blue-700">
+              Bezár
+            </button>
+          </form>
+        )
+      })()}
 
       {/* Result summary */}
       {valid && lengthEntries.length > 0 && (

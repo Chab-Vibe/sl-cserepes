@@ -80,29 +80,36 @@ function moduleFloor(relH: number): number {
   return Math.max(0, n)
 }
 
+// A megadott (mm-ben kért) alsó-darab-hosszhoz legközelebb eső érvényes
+// modulhatárt adja vissza (1..totalModules-1 közé szorítva).
+export function nearestSplitModules(totalModules: number, bottomExtraM: number, targetBottomM: number): number {
+  const raw = (targetBottomM - bottomExtraM) / SHEET.MODULE_M
+  return Math.min(Math.max(totalModules - 1, 1), Math.max(1, Math.round(raw)))
+}
+
 // Adott modulszámú lemezoszlopból legyártható szegmenseket épít fel.
 // bottomExtraM: a legalsó darab alsó ráhagyása (csurgó az eresznél, 0 emelt aljnál),
 // startYM: a lemez aljának Y pozíciója a síkon (0 az eresznél, modulrács-vonal emelt aljnál).
-// forceSplit: felhasználó által kért kézi megosztás — ha a lemez egyébként
-// egyben (nem 6 m fölötti) elférne, mégis középen (a legközelebbi modulhoz
-// igazítva) két darabra vágja, OVERLAP_M átfedéssel.
+// splitAtModules: felhasználó által kért kézi megosztás — ha a lemez egyébként
+// egyben (nem 6 m fölötti) elférne, mégis az adott modulszámnál (az alsó darab
+// modulmennyisége) két darabra vágja, OVERLAP_M átfedéssel.
 // Ha a teljes hossz 6 m alatt van (és nincs kézi megosztás), vagy a
 // felhasználó engedélyezte az egybefüggő lemezt, egyetlen szegmenst ad
 // vissza. Egyébként modulhatáron vágva toldja, a darabok OVERLAP_M
 // átfedéssel épülnek egymásra, az orr a legfelső darabon van.
-function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, forceSplit = false): SheetSegment[] {
+function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, splitAtModules?: number): SheetSegment[] {
   if (totalModules <= 0) return []
 
   const totalLenM = r3(bottomExtraM + totalModules * SHEET.MODULE_M + SHEET.NOSE_M)
   const needsAutoSplit = !allowOversize && totalLenM > SHEET.MAX_SINGLE_LENGTH_M + 1e-9
 
-  if (!needsAutoSplit && forceSplit && totalModules >= 2) {
-    const half = Math.min(totalModules - 1, Math.max(1, Math.round(totalModules / 2)))
-    const lenA = r3(bottomExtraM + half * SHEET.MODULE_M)
-    const lenB = r3(SHEET.OVERLAP_M + (totalModules - half) * SHEET.MODULE_M + SHEET.NOSE_M)
+  if (!needsAutoSplit && splitAtModules !== undefined && totalModules >= 2) {
+    const k = Math.min(totalModules - 1, Math.max(1, Math.round(splitAtModules)))
+    const lenA = r3(bottomExtraM + k * SHEET.MODULE_M)
+    const lenB = r3(SHEET.OVERLAP_M + (totalModules - k) * SHEET.MODULE_M + SHEET.NOSE_M)
     return [
-      { order: 0, modules: half, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
-      { order: 1, modules: totalModules - half, lengthM: lenB, startM: r3(startYM + lenA - SHEET.OVERLAP_M), endM: r3(startYM + lenA - SHEET.OVERLAP_M + lenB) },
+      { order: 0, modules: k, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
+      { order: 1, modules: totalModules - k, lengthM: lenB, startM: r3(startYM + lenA - SHEET.OVERLAP_M), endM: r3(startYM + lenA - SHEET.OVERLAP_M + lenB) },
     ]
   }
 
@@ -178,7 +185,7 @@ export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneRe
   const width = maxX - minX
   const numCols = Math.ceil(width / SHEET.EFFECTIVE_WIDTH_M)
   const startX = minX + getStartOffset(plane)
-  const manualSplitCols = plane.manualSplitCols ?? []
+  const manualSplits = plane.manualSplits ?? []
   const columns: ColumnResult[] = []
 
   for (let i = 0; i < numCols; i++) {
@@ -206,9 +213,10 @@ export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneRe
     const startY = raised ? plane.eaveOverhangM + nBot * SHEET.MODULE_M : 0
     const bottomExtra = raised ? 0 : plane.eaveOverhangM
 
-    const segments = buildSegments(modules, bottomExtra, startY, allowOversize, manualSplitCols.includes(i))
+    const manualSplit = manualSplits.find(s => s.col === i)
+    const segments = buildSegments(modules, bottomExtra, startY, allowOversize, manualSplit?.modules)
     if (segments.length > 0) {
-      columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1 })
+      columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra })
     }
   }
 

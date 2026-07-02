@@ -4,10 +4,11 @@ import { polyMinX, polyMaxX, polyHeight, SHEET, getStartOffset } from '../../uti
 interface Props {
   plane: RoofPlane
   result: PlaneResult
-  onToggleColumnSplit?: (colIndex: number) => void
+  onSelectColumn?: (colIndex: number) => void
+  selectedCol?: number | null
 }
 
-export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
+export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null }: Props) {
   if (plane.points.length < 3 || result.columns.length === 0) return null
 
   const minX = polyMinX(plane.points)
@@ -18,7 +19,7 @@ export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
   const totalSheetW = numCols * SHEET.EFFECTIVE_WIDTH_M
   const overhangLeft  = Math.max(0, minX - startX)
   const overhangRight = Math.max(0, startX + totalSheetW - maxX)
-  const manualSplitCols = plane.manualSplitCols ?? []
+  const manualSplits = plane.manualSplits ?? []
 
   // Drawing canvas
   const SVG_W = 700
@@ -99,10 +100,11 @@ export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
             const [sx2] = toSvg(wx2, 0)
             const colPx = sx2 - sx1
             const cx = (sx1 + sx2) / 2
-            const isManualSplit = manualSplitCols.includes(col.index)
+            const isManualSplit = manualSplits.some(s => s.col === col.index)
             // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
             // 6 m fölötti magasság miatt automatikusan toldva.
-            const isToggleable = col.segments.length === 1 || isManualSplit
+            const isSelectable = col.segments.length === 1 || isManualSplit
+            const isSelected = selectedCol === col.index
             const colBottomM = col.segments.length ? col.segments[0].startM : 0
             const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
             const [, colSyTop] = toSvg(wx1, colTopM)
@@ -120,7 +122,7 @@ export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
                   return (
                     <g key={seg.order}>
                       <rect x={sx1} y={segSyTop} width={colPx} height={segH}
-                        fill="white" stroke="#888" strokeWidth={0.8} />
+                        fill={isSelected ? '#eff6ff' : 'white'} stroke={isSelected ? '#2563eb' : '#888'} strokeWidth={isSelected ? 1.4 : 0.8} />
                       {colPx > 14 && segH > 12 && (
                         <text
                           x={cx} y={cySeg}
@@ -149,16 +151,16 @@ export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
                   )
                 })}
 
-                {/* Click-to-split overlay: kattintásra a legközelebbi modulnál
-                    kettéosztja a lemezt (ha nincs 6 m fölötti auto-toldás) */}
-                {onToggleColumnSplit && isToggleable && (
+                {/* Click-to-select overlay: kiválasztja az oszlopot kézi
+                    megosztás megadásához (ha nincs 6 m fölötti auto-toldás) */}
+                {onSelectColumn && isSelectable && (
                   <rect
                     x={sx1} y={colSyTop} width={colPx} height={colSyBot - colSyTop}
                     fill="transparent"
                     className="cursor-pointer hover:fill-blue-500/10 print:hidden"
-                    onClick={() => onToggleColumnSplit(col.index)}
+                    onClick={() => onSelectColumn(col.index)}
                   >
-                    <title>{isManualSplit ? 'Kattints az egyesítéshez' : 'Kattints a lemez megosztásához (legközelebbi modulnál)'}</title>
+                    <title>{isManualSplit ? 'Kattints a megosztás módosításához' : 'Kattints a lemez megosztásához'}</title>
                   </rect>
                 )}
               </g>
