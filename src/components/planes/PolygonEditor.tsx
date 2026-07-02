@@ -12,51 +12,64 @@ const PAD = { top: 16, right: 16, bottom: 24, left: 32 }
 const DW = CW - PAD.left - PAD.right
 const DH = CH - PAD.top - PAD.bottom
 
-function getScale(points: [number, number][]) {
-  const maxX = points.length ? Math.max(...points.map(p => p[0])) : 0
-  const maxY = points.length ? Math.max(...points.map(p => p[1])) : 0
-  const viewW = Math.max(maxX + 0.5, 5)
-  const viewH = Math.max(maxY + 0.5, 3)
+// Nézeti tartomány: mindig tartalmazza az origót, hogy a 0-vonalak
+// (tengelyek) mindig láthatók legyenek negatív koordináták esetén is.
+function getExtent(points: [number, number][]) {
+  const xs = points.map(p => p[0])
+  const ys = points.map(p => p[1])
+  let minX = Math.min(0, ...xs)
+  let maxX = Math.max(0, ...xs)
+  let minY = Math.min(0, ...ys)
+  let maxY = Math.max(0, ...ys)
+  maxX = Math.max(maxX, minX + 4.5)
+  maxY = Math.max(maxY, minY + 2.7)
+  minX -= 0.3; maxX += 0.3
+  minY -= 0.3; maxY += 0.3
+  return { minX, maxX, minY, maxY }
+}
+
+function getScale(ext: { minX: number; maxX: number; minY: number; maxY: number }) {
+  const viewW = ext.maxX - ext.minX
+  const viewH = ext.maxY - ext.minY
   return Math.min(DW / viewW, DH / viewH)
 }
 
-function toSvg(wx: number, wy: number, scale: number): [number, number] {
-  return [PAD.left + wx * scale, PAD.top + DH - wy * scale]
-}
-
 export function PolygonEditor({ points, onChange }: Props) {
-  const scale = getScale(points)
-  const svgPts = points.map(([x, y]) => toSvg(x, y, scale))
+  const ext = getExtent(points)
+  const scale = getScale(ext)
+  const project = (wx: number, wy: number): [number, number] =>
+    [PAD.left + (wx - ext.minX) * scale, PAD.top + DH - (wy - ext.minY) * scale]
+  const svgPts = points.map(([x, y]) => project(x, y))
   const closed = points.length >= 3
   const pathD = svgPts.map(([sx, sy], i) => `${i === 0 ? 'M' : 'L'}${sx.toFixed(1)},${sy.toFixed(1)}`).join(' ') + (closed ? ' Z' : '')
 
   // Grid
-  const maxX = points.length ? Math.max(...points.map(p => p[0])) : 0
-  const maxY = points.length ? Math.max(...points.map(p => p[1])) : 0
-  const viewW = Math.max(maxX + 0.5, 5)
-  const viewH = Math.max(maxY + 0.5, 3)
   const gridLines: React.ReactNode[] = []
-  for (let x = 0; x <= Math.ceil(viewW); x++) {
-    const [sx] = toSvg(x, 0, scale)
-    if (sx > PAD.left + DW + 1) continue
+  for (let x = Math.floor(ext.minX); x <= Math.ceil(ext.maxX); x++) {
+    const [sx] = project(x, 0)
+    if (sx < PAD.left - 1 || sx > PAD.left + DW + 1) continue
+    const isOrigin = x === 0
     gridLines.push(
-      <line key={`gx${x}`} x1={sx} y1={PAD.top} x2={sx} y2={PAD.top + DH} stroke="rgba(15,23,42,0.06)" strokeWidth={1} />,
+      <line key={`gx${x}`} x1={sx} y1={PAD.top} x2={sx} y2={PAD.top + DH}
+        stroke={isOrigin ? 'rgba(15,23,42,0.22)' : 'rgba(15,23,42,0.06)'} strokeWidth={isOrigin ? 1.2 : 1} />,
       <text key={`tx${x}`} x={sx} y={PAD.top + DH + 13} textAnchor="middle" fill="rgba(15,23,42,0.32)" fontSize={8}>{x}m</text>
     )
   }
-  for (let y = 0; y <= Math.ceil(viewH); y++) {
-    const [, sy] = toSvg(0, y, scale)
-    if (sy < PAD.top - 1) continue
+  for (let y = Math.floor(ext.minY); y <= Math.ceil(ext.maxY); y++) {
+    const [, sy] = project(0, y)
+    if (sy < PAD.top - 1 || sy > PAD.top + DH + 1) continue
+    const isOrigin = y === 0
     gridLines.push(
-      <line key={`gy${y}`} x1={PAD.left} y1={sy} x2={PAD.left + DW} y2={sy} stroke="rgba(15,23,42,0.06)" strokeWidth={1} />,
+      <line key={`gy${y}`} x1={PAD.left} y1={sy} x2={PAD.left + DW} y2={sy}
+        stroke={isOrigin ? 'rgba(15,23,42,0.22)' : 'rgba(15,23,42,0.06)'} strokeWidth={isOrigin ? 1.2 : 1} />,
       <text key={`ty${y}`} x={PAD.left - 4} y={sy + 3} textAnchor="end" fill="rgba(15,23,42,0.32)" fontSize={8}>{y}m</text>
     )
   }
 
   const addPoint = () => onChange([...points, [0, 0]])
   const deletePoint = (i: number) => onChange(points.filter((_, j) => j !== i))
-  const updateX = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [Math.max(0, v), p[1]] : p) as [number,number][])
-  const updateY = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [p[0], Math.max(0, v)] : p) as [number,number][])
+  const updateX = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [v, p[1]] : p) as [number,number][])
+  const updateY = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [p[0], v] : p) as [number,number][])
 
   return (
     <div>
@@ -101,17 +114,27 @@ export function PolygonEditor({ points, onChange }: Props) {
             <Fragment key={i}>
               <span className="text-slate-500 text-center font-mono">{i + 1}</span>
               <input
-                type="number" step={0.1} min={0}
-                value={wx === 0 && points[i][0] === 0 ? '' : wx}
+                type="number" step={0.1}
+                value={wx === 0 ? '' : wx}
                 placeholder="0.0"
-                onChange={e => updateX(i, parseFloat(e.target.value) || 0)}
+                onChange={e => {
+                  const raw = e.target.value
+                  if (raw === '') { updateX(i, 0); return }
+                  const parsed = parseFloat(raw)
+                  if (!Number.isNaN(parsed)) updateX(i, parsed)
+                }}
                 className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400 w-full"
               />
               <input
-                type="number" step={0.1} min={0}
-                value={wy === 0 && points[i][1] === 0 ? '' : wy}
+                type="number" step={0.1}
+                value={wy === 0 ? '' : wy}
                 placeholder="0.0"
-                onChange={e => updateY(i, parseFloat(e.target.value) || 0)}
+                onChange={e => {
+                  const raw = e.target.value
+                  if (raw === '') { updateY(i, 0); return }
+                  const parsed = parseFloat(raw)
+                  if (!Number.isNaN(parsed)) updateY(i, parsed)
+                }}
                 className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400 w-full"
               />
               <button onClick={() => deletePoint(i)} className="text-slate-300 hover:text-red-500 transition-colors flex justify-center">

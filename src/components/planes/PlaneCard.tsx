@@ -32,6 +32,12 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
   const splitCount = result.columns.filter(c => c.isSplit).length
   const oversizeCount = result.columns.filter(c => c.segments.some(s => s.lengthM > SHEET.MAX_SINGLE_LENGTH_M)).length
 
+  const toggleColumnSplit = (colIndex: number) => {
+    const cur = plane.manualSplitCols ?? []
+    const next = cur.includes(colIndex) ? cur.filter(i => i !== colIndex) : [...cur, colIndex]
+    onChange({ manualSplitCols: next })
+  }
+
   return (
     <div className={`relative rounded-2xl p-4 bg-white border shadow-sm transition-colors print:rounded-none print:border-0 print:p-0 print:shadow-none ${
       valid ? 'border-slate-200' : 'border-amber-300'
@@ -109,7 +115,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           {splitCount > 0 && (
             <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
               <AlertTriangle size={13} className="shrink-0" />
-              {splitCount} oszlop toldva (6 m fölötti magasság, {Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel)
+              {splitCount} oszlop toldva ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel)
             </div>
           )}
           {oversizeCount > 0 && (
@@ -122,7 +128,12 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
       )}
 
       {/* Sheet layout drawing */}
-      {valid && <SheetLayout plane={plane} result={result} />}
+      {valid && <SheetLayout plane={plane} result={result} onToggleColumnSplit={toggleColumnSplit} />}
+      {valid && (
+        <p className="text-slate-300 text-[10px] mt-1 print:hidden">
+          Kattints egy lemezre a rajzon a kézi megosztásához (legközelebbi modulnál, {Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel).
+        </p>
+      )}
 
       {/* Result summary */}
       {valid && lengthEntries.length > 0 && (

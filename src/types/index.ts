@@ -6,6 +6,7 @@ export interface RoofPlane {
   points: [number, number][]   // [x, y] méterben, y=0 a csurgónál
   eaveOverhangM: number
   alignment: Alignment
+  manualSplitCols?: number[]   // oszlopindexek, ahol a felhasználó kézzel megosztotta a lemezt
 }
 
 // Egy fizikailag legyártott/rendelhető lemezdarab egy oszlopon belül.

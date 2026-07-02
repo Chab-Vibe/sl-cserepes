@@ -1,5 +1,5 @@
 import type { PlaneResult, OrderGroup } from '../../types'
-import { groupByLength, totalSheets, SHEET } from '../../utils/calculations'
+import { groupByLength, totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, SHEET } from '../../utils/calculations'
 
 interface Props {
   results: PlaneResult[]
@@ -11,7 +11,8 @@ export function PrintReport({ results }: Props) {
   // Összesített rendelési tábla (minden sík együtt)
   const groups: OrderGroup[] = groupByLength(results)
   const total = totalSheets(groups)
-  const totalArea = groups.reduce((s, g) => s + g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M, 0)
+  const totalArea = totalMaterialAreaM2(groups)
+  const coverageArea = totalCoverageAreaM2(groups)
 
   return (
     <div className="hidden print:block">
@@ -42,7 +43,7 @@ export function PrintReport({ results }: Props) {
                   {g.totalSheets}
                 </td>
                 <td className="border border-slate-300 px-2 py-1 text-right text-gray-700">
-                  {(g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M).toFixed(2)}
+                  {groupMaterialAreaM2(g).toFixed(2)}
                 </td>
                 <td className="border border-slate-300 px-2 py-1 text-gray-500">
                   {g.planeNames.join(', ')}
@@ -59,6 +60,9 @@ export function PrintReport({ results }: Props) {
             </tr>
           </tfoot>
         </table>
+        <p className="text-[10px] text-gray-500 mt-1.5">
+          A terület a lemez teljes szélességével (1,1 m) számolt anyagszükséglet. Tetőfelület szükséglet (hasznos {SHEET.EFFECTIVE_WIDTH_M * 1000} mm szélességgel): <strong>{coverageArea.toFixed(2)} m²</strong>
+        </p>
       </div>
 
     </div>

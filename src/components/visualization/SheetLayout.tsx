@@ -1,21 +1,24 @@
 import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
-import { polyWidth, polyHeight, SHEET, getStartOffset } from '../../utils/calculations'
+import { polyMinX, polyMaxX, polyHeight, SHEET, getStartOffset } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
   result: PlaneResult
+  onToggleColumnSplit?: (colIndex: number) => void
 }
 
-export function SheetLayout({ plane, result }: Props) {
+export function SheetLayout({ plane, result, onToggleColumnSplit }: Props) {
   if (plane.points.length < 3 || result.columns.length === 0) return null
 
-  const maxX = polyWidth(plane.points) || 1
+  const minX = polyMinX(plane.points)
+  const maxX = polyMaxX(plane.points) || 1
   const maxY = polyHeight(plane.points) || 1
-  const startX = getStartOffset(plane)
+  const startX = minX + getStartOffset(plane)
   const numCols = result.columns.length
   const totalSheetW = numCols * SHEET.EFFECTIVE_WIDTH_M
-  const overhangLeft  = Math.max(0, -startX)
+  const overhangLeft  = Math.max(0, minX - startX)
   const overhangRight = Math.max(0, startX + totalSheetW - maxX)
+  const manualSplitCols = plane.manualSplitCols ?? []
 
   // Drawing canvas
   const SVG_W = 700
@@ -25,7 +28,7 @@ export function SheetLayout({ plane, result }: Props) {
   const DH = SVG_H - PAD.top - PAD.bottom
 
   // View includes overhangs
-  const viewLeft  = Math.min(startX, 0)
+  const viewLeft  = Math.min(startX, minX)
   const viewRight = Math.max(maxX, startX + totalSheetW)
   const viewW = viewRight - viewLeft
   const viewH = maxY
@@ -54,7 +57,7 @@ export function SheetLayout({ plane, result }: Props) {
   }
 
   const alignLabel = plane.alignment === 'left' ? 'Bal' : plane.alignment === 'right' ? 'Jobb' : 'Közép'
-  const totalWidthMm = Math.round(maxX * 1000)
+  const totalWidthMm = Math.round((maxX - minX) * 1000)
   const totalSheetWidthMm = Math.round(totalSheetW * 1000)
 
   // Collect unique segment lengths for legend
@@ -96,6 +99,14 @@ export function SheetLayout({ plane, result }: Props) {
             const [sx2] = toSvg(wx2, 0)
             const colPx = sx2 - sx1
             const cx = (sx1 + sx2) / 2
+            const isManualSplit = manualSplitCols.includes(col.index)
+            // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
+            // 6 m fölötti magasság miatt automatikusan toldva.
+            const isToggleable = col.segments.length === 1 || isManualSplit
+            const colBottomM = col.segments.length ? col.segments[0].startM : 0
+            const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
+            const [, colSyTop] = toSvg(wx1, colTopM)
+            const [, colSyBot] = toSvg(wx1, colBottomM)
 
             return (
               <g key={col.index}>
@@ -138,6 +149,18 @@ export function SheetLayout({ plane, result }: Props) {
                   )
                 })}
 
+                {/* Click-to-split overlay: kattintásra a legközelebbi modulnál
+                    kettéosztja a lemezt (ha nincs 6 m fölötti auto-toldás) */}
+                {onToggleColumnSplit && isToggleable && (
+                  <rect
+                    x={sx1} y={colSyTop} width={colPx} height={colSyBot - colSyTop}
+                    fill="transparent"
+                    className="cursor-pointer hover:fill-blue-500/10 print:hidden"
+                    onClick={() => onToggleColumnSplit(col.index)}
+                  >
+                    <title>{isManualSplit ? 'Kattints az egyesítéshez' : 'Kattints a lemez megosztásához (legközelebbi modulnál)'}</title>
+                  </rect>
+                )}
               </g>
             )
           })}
@@ -212,7 +235,7 @@ export function SheetLayout({ plane, result }: Props) {
 
           {/* ── Bottom dimension: polygon width ── */}
           {(() => {
-            const [px0, py0] = toSvg(0, 0)
+            const [px0, py0] = toSvg(minX, 0)
             const [px1]      = toSvg(maxX, 0)
             const dy = py0 + 28
             return (

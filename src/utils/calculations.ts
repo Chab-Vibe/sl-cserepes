@@ -83,15 +83,30 @@ function moduleFloor(relH: number): number {
 // Adott modulszámú lemezoszlopból legyártható szegmenseket épít fel.
 // bottomExtraM: a legalsó darab alsó ráhagyása (csurgó az eresznél, 0 emelt aljnál),
 // startYM: a lemez aljának Y pozíciója a síkon (0 az eresznél, modulrács-vonal emelt aljnál).
-// Ha a teljes hossz 6 m alatt van, vagy a felhasználó engedélyezte az egybefüggő
-// lemezt, egyetlen szegmenst ad vissza. Egyébként modulhatáron vágva toldja,
-// a darabok OVERLAP_M átfedéssel épülnek egymásra, az orr a legfelső darabon van.
-function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean): SheetSegment[] {
+// forceSplit: felhasználó által kért kézi megosztás — ha a lemez egyébként
+// egyben (nem 6 m fölötti) elférne, mégis középen (a legközelebbi modulhoz
+// igazítva) két darabra vágja, OVERLAP_M átfedéssel.
+// Ha a teljes hossz 6 m alatt van (és nincs kézi megosztás), vagy a
+// felhasználó engedélyezte az egybefüggő lemezt, egyetlen szegmenst ad
+// vissza. Egyébként modulhatáron vágva toldja, a darabok OVERLAP_M
+// átfedéssel épülnek egymásra, az orr a legfelső darabon van.
+function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, forceSplit = false): SheetSegment[] {
   if (totalModules <= 0) return []
 
   const totalLenM = r3(bottomExtraM + totalModules * SHEET.MODULE_M + SHEET.NOSE_M)
+  const needsAutoSplit = !allowOversize && totalLenM > SHEET.MAX_SINGLE_LENGTH_M + 1e-9
 
-  if (allowOversize || totalLenM <= SHEET.MAX_SINGLE_LENGTH_M + 1e-9) {
+  if (!needsAutoSplit && forceSplit && totalModules >= 2) {
+    const half = Math.min(totalModules - 1, Math.max(1, Math.round(totalModules / 2)))
+    const lenA = r3(bottomExtraM + half * SHEET.MODULE_M)
+    const lenB = r3(SHEET.OVERLAP_M + (totalModules - half) * SHEET.MODULE_M + SHEET.NOSE_M)
+    return [
+      { order: 0, modules: half, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
+      { order: 1, modules: totalModules - half, lengthM: lenB, startM: r3(startYM + lenA - SHEET.OVERLAP_M), endM: r3(startYM + lenA - SHEET.OVERLAP_M + lenB) },
+    ]
+  }
+
+  if (!needsAutoSplit) {
     return [{ order: 0, modules: totalModules, lengthM: totalLenM, startM: r3(startYM), endM: r3(startYM + totalLenM) }]
   }
 
@@ -125,9 +140,20 @@ function buildSegments(totalModules: number, bottomExtraM: number, startYM: numb
   return segments
 }
 
+// A sokszög X tartománya (bounding box), így a pontok lehetnek negatívak is
+// — a lemezkiosztás mindig a tényleges bal/jobb szélhez igazodik, nem
+// feltételezi, hogy a bal szél X=0-nál van.
+export function polyMinX(points: [number, number][]): number {
+  return points.length === 0 ? 0 : Math.min(...points.map(p => p[0]))
+}
+
+export function polyMaxX(points: [number, number][]): number {
+  return points.length === 0 ? 0 : Math.max(...points.map(p => p[0]))
+}
+
 export function polyWidth(points: [number, number][]): number {
   if (points.length === 0) return 0
-  return Math.max(...points.map(p => p[0]))
+  return polyMaxX(points) - polyMinX(points)
 }
 
 export function polyHeight(points: [number, number][]): number {
@@ -147,17 +173,20 @@ export function getStartOffset(plane: RoofPlane): number {
 }
 
 export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneResult {
-  const width = polyWidth(plane.points)
+  const minX = polyMinX(plane.points)
+  const maxX = polyMaxX(plane.points)
+  const width = maxX - minX
   const numCols = Math.ceil(width / SHEET.EFFECTIVE_WIDTH_M)
-  const startX = getStartOffset(plane)
+  const startX = minX + getStartOffset(plane)
+  const manualSplitCols = plane.manualSplitCols ?? []
   const columns: ColumnResult[] = []
 
   for (let i = 0; i < numCols; i++) {
     const sheetX1 = startX + i * SHEET.EFFECTIVE_WIDTH_M
     const sheetX2 = sheetX1 + SHEET.EFFECTIVE_WIDTH_M
     // Intersect with polygon extent
-    const polyX1 = Math.max(0, sheetX1)
-    const polyX2 = Math.min(width, sheetX2)
+    const polyX1 = Math.max(minX, sheetX1)
+    const polyX2 = Math.min(maxX, sheetX2)
     const ext = polyX2 > polyX1 ? columnExtent(plane.points, polyX1, polyX2) : null
     if (!ext) continue
 
@@ -177,7 +206,7 @@ export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneRe
     const startY = raised ? plane.eaveOverhangM + nBot * SHEET.MODULE_M : 0
     const bottomExtra = raised ? 0 : plane.eaveOverhangM
 
-    const segments = buildSegments(modules, bottomExtra, startY, allowOversize)
+    const segments = buildSegments(modules, bottomExtra, startY, allowOversize, manualSplitCols.includes(i))
     if (segments.length > 0) {
       columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1 })
     }
@@ -212,6 +241,26 @@ export function groupByLength(results: PlaneResult[]): OrderGroup[] {
 
 export function totalSheets(groups: OrderGroup[]): number {
   return groups.reduce((s, g) => s + g.totalSheets, 0)
+}
+
+// Anyagszükséglet: a lemez TELJES szélességével (1,1 m) — ennyi anyagot kell
+// ténylegesen megrendelni/kifizetni, mert minden lemez ilyen szélességben készül.
+export function groupMaterialAreaM2(g: OrderGroup): number {
+  return g.lengthM * g.totalSheets * SHEET.TOTAL_WIDTH_M
+}
+
+export function totalMaterialAreaM2(groups: OrderGroup[]): number {
+  return groups.reduce((s, g) => s + groupMaterialAreaM2(g), 0)
+}
+
+// Tetőfelület szükséglet: a lemez HASZNOS szélességével (1,0 m) — ennyi
+// tényleges tetőfelületet fed le a lemez (az átfedő rész nem számít bele).
+export function groupCoverageAreaM2(g: OrderGroup): number {
+  return g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M
+}
+
+export function totalCoverageAreaM2(groups: OrderGroup[]): number {
+  return groups.reduce((s, g) => s + groupCoverageAreaM2(g), 0)
 }
 
 export function isPlaneValid(plane: RoofPlane): boolean {

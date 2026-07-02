@@ -1,7 +1,7 @@
 import { Copy, Check } from 'lucide-react'
 import { useState } from 'react'
 import type { OrderGroup } from '../../types'
-import { totalSheets, SHEET } from '../../utils/calculations'
+import { totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, SHEET } from '../../utils/calculations'
 
 interface Props {
   groups: OrderGroup[]
@@ -61,7 +61,7 @@ export function ResultsSummary({ groups }: Props) {
               </td>
               <td className="py-1.5 text-right text-blue-600 font-bold">{g.totalSheets} db</td>
               <td className="py-1.5 text-right text-slate-400 text-xs pl-3">
-                {(g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M).toFixed(2)} m²
+                {groupMaterialAreaM2(g).toFixed(2)} m²
               </td>
             </tr>
           ))}
@@ -71,11 +71,16 @@ export function ResultsSummary({ groups }: Props) {
             <td className="pt-2 text-slate-500 text-sm font-medium">Összesen</td>
             <td className="pt-2 text-right text-slate-800 font-bold text-lg">{total} db</td>
             <td className="pt-2 text-right text-slate-400 text-xs pl-3">
-              {groups.reduce((s, g) => s + g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M, 0).toFixed(2)} m²
+              {totalMaterialAreaM2(groups).toFixed(2)} m²
             </td>
           </tr>
         </tfoot>
       </table>
+
+      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+        <span className="text-slate-400">Tetőfelület szükséglet (hasznos {SHEET.EFFECTIVE_WIDTH_M * 1000} mm):</span>
+        <span className="text-slate-600 font-semibold">{totalCoverageAreaM2(groups).toFixed(2)} m²</span>
+      </div>
     </div>
   )
 }
