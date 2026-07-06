@@ -3,7 +3,7 @@ import { calculatePlane, SHEET_PROFILES } from '../../utils/calculations'
 import { PlaneCard } from './PlaneCard'
 
 export function PlaneList() {
-  const { planes, allowOversize, sheetType, updatePlane, removePlane, duplicatePlane } = useStore()
+  const { planes, allowOversize, sheetType, updatePlane, removePlane, duplicatePlane, mirrorPlane } = useStore()
   const profile = SHEET_PROFILES[sheetType]
 
   if (planes.length === 0) {
@@ -25,6 +25,7 @@ export function PlaneList() {
           onChange={patch => updatePlane(plane.id, patch)}
           onRemove={() => removePlane(plane.id)}
           onDuplicate={() => duplicatePlane(plane.id)}
+          onMirror={() => mirrorPlane(plane.id)}
         />
       ))}
     </div>

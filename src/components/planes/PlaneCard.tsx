@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle, Ban } from 'lucide-react'
+import { Trash2, Copy, FlipHorizontal2, AlignLeft, AlignCenter, AlignRight, AlertTriangle, Ban } from 'lucide-react'
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
@@ -12,6 +12,7 @@ interface Props {
   onChange: (patch: Partial<RoofPlane>) => void
   onRemove: () => void
   onDuplicate: () => void
+  onMirror: () => void
 }
 
 const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] = [
@@ -20,7 +21,7 @@ const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] =
   { value: 'right',  icon: <AlignRight size={16} />,  label: 'Jobb' },
 ]
 
-export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplicate }: Props) {
+export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplicate, onMirror }: Props) {
   const valid = isPlaneValid(plane)
   const [selectedCol, setSelectedCol] = useState<number | null>(null)
 
@@ -63,13 +64,16 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
         <button onClick={onDuplicate} title="Másolás" className="text-slate-300 hover:text-blue-500 transition-colors">
           <Copy size={17} />
         </button>
+        <button onClick={onMirror} title="Tükrözés" className="text-slate-300 hover:text-blue-500 transition-colors">
+          <FlipHorizontal2 size={17} />
+        </button>
         <button onClick={onRemove} title="Törlés" className="text-slate-300 hover:text-red-500 transition-colors">
           <Trash2 size={17} />
         </button>
       </div>
 
       {/* Sík neve */}
-      <div className="flex items-center gap-2 mb-3 pr-14 print:hidden">
+      <div className="flex items-center gap-2 mb-3 pr-20 print:hidden">
         <span className="text-slate-400 text-sm shrink-0">Név:</span>
         <input
           className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 font-semibold text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
