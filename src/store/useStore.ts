@@ -1,15 +1,17 @@
 import { create } from 'zustand'
-import type { RoofPlane } from '../types'
-import { loadPlanes, savePlanes, loadAllowOversize, saveAllowOversize } from '../utils/storage'
+import type { RoofPlane, SheetTypeId } from '../types'
+import { loadPlanes, savePlanes, loadAllowOversize, saveAllowOversize, loadSheetType, saveSheetType } from '../utils/storage'
 
 interface Store {
   planes: RoofPlane[]
   allowOversize: boolean
+  sheetType: SheetTypeId
   addPlane: () => void
   duplicatePlane: (id: string) => void
   updatePlane: (id: string, patch: Partial<RoofPlane>) => void
   removePlane: (id: string) => void
   setAllowOversize: (value: boolean) => void
+  setSheetType: (value: SheetTypeId) => void
   reset: () => void
   importProject: (data: { planes: RoofPlane[]; allowOversize: boolean }) => void
 }
@@ -17,6 +19,7 @@ interface Store {
 export const useStore = create<Store>((set, get) => ({
   planes: loadPlanes(),
   allowOversize: loadAllowOversize(),
+  sheetType: loadSheetType(),
 
   addPlane: () => {
     const planes = get().planes
@@ -62,6 +65,11 @@ export const useStore = create<Store>((set, get) => ({
   setAllowOversize: (value) => {
     saveAllowOversize(value)
     set({ allowOversize: value })
+  },
+
+  setSheetType: (value) => {
+    saveSheetType(value)
+    set({ sheetType: value })
   },
 
   reset: () => {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from './store/useStore'
-import { calculatePlane, groupByLength, isPlaneValid } from './utils/calculations'
+import { calculatePlane, groupByLength, isPlaneValid, SHEET_PROFILES } from './utils/calculations'
 import { Header } from './components/Header'
 import { PlaneList } from './components/planes/PlaneList'
 import { AddPlaneButton } from './components/planes/AddPlaneButton'
@@ -12,9 +12,11 @@ import { PdfExport } from './components/results/PdfExport'
 function App() {
   const planes = useStore(s => s.planes)
   const allowOversize = useStore(s => s.allowOversize)
+  const sheetType = useStore(s => s.sheetType)
+  const profile = SHEET_PROFILES[sheetType]
 
   const validPlanes = useMemo(() => planes.filter(isPlaneValid), [planes])
-  const results = useMemo(() => validPlanes.map(p => calculatePlane(p, allowOversize)), [validPlanes, allowOversize])
+  const results = useMemo(() => validPlanes.map(p => calculatePlane(p, profile, allowOversize)), [validPlanes, profile, allowOversize])
   const groups = useMemo(() => groupByLength(results), [results])
 
   return (
@@ -24,7 +26,7 @@ function App() {
         <p className="text-sm text-gray-500">{new Date().toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
 
-      <PrintReport results={results} />
+      <PrintReport results={results} profile={profile} />
 
       <Header />
 
@@ -35,8 +37,8 @@ function App() {
         </section>
 
         <aside className="md:sticky md:top-4 md:self-start">
-          <ResultsSummary groups={groups} />
-          <ResultsTable results={results} />
+          <ResultsSummary groups={groups} profile={profile} />
+          <ResultsTable results={results} profile={profile} />
           <PdfExport />
         </aside>
       </div>

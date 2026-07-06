@@ -1,8 +1,12 @@
 export type Alignment = 'left' | 'center' | 'right'
 
+// A választható lemeztípus azonosítója — a konkrét méreteket/szabályokat a
+// SHEET_PROFILES (calculations.ts) tárolja ehhez az azonosítóhoz.
+export type SheetTypeId = 'cserepeslemez' | 't35'
+
 export interface ManualSplit {
-  col: number      // oszlopindex
-  modules: number  // az alsó (csurgóhoz közelebbi) darab modulszáma
+  col: number    // oszlopindex
+  atM: number    // a kívánt alsó darab hossza méterben (a profil dönti el, hogyan illeszkedik rá: modulhatárra kerekítve vagy folytonosan)
 }
 
 export interface RoofPlane {
@@ -11,16 +15,17 @@ export interface RoofPlane {
   points: [number, number][]   // [x, y] méterben, y=0 a csurgónál
   eaveOverhangM: number
   alignment: Alignment
-  manualSplits?: ManualSplit[]  // kézi megosztások: oszlopindex + alsó darab modulszáma
+  manualSplits?: ManualSplit[]  // kézi megosztások: oszlopindex + kívánt alsó darab hossz
 }
 
 // Egy fizikailag legyártott/rendelhető lemezdarab egy oszlopon belül.
-// Egy oszlophoz normál esetben 1 szegmens tartozik; 6 m fölött (ha nincs
-// engedélyezve az egybefüggő lemez) a rendszer 2+ szegmensre bontja,
-// átfedéssel a toldásnál. Kézi megosztással is 2 szegmens jöhet létre.
+// Egy oszlophoz normál esetben 1 szegmens tartozik; a gyártási max. hossz
+// fölött (ha nincs engedélyezve az egybefüggő lemez) a rendszer 2+
+// szegmensre bontja, átfedéssel a toldásnál. Kézi megosztással is 2
+// szegmens jöhet létre.
 export interface SheetSegment {
   order: number       // 0 = csurgóhoz legközelebbi (alsó) darab
-  modules: number      // a szegmensben lévő modulok száma (informatív)
+  modules: number      // a szegmensben lévő modulok száma (informatív; 0, ha a profilnak nincs modulosztása)
   lengthM: number      // a szegmens tényleges gyártási hossza
   startM: number       // hol kezdődik a szegmensben (oszlop-koordináta, m)
   endM: number         // hol végződik a szegmensben (oszlop-koordináta, m)
@@ -31,8 +36,9 @@ export interface ColumnResult {
   heightM: number
   segments: SheetSegment[]
   isSplit: boolean
-  totalModules: number   // az oszlop teljes (meg nem osztott) modulszáma
-  bottomExtraM: number   // a legalsó darab alsó ráhagyása (csurgó, vagy 0 emelt aljnál)
+  totalModules: number   // az oszlop teljes (meg nem osztott) modulszáma (0, ha a profilnak nincs modulosztása)
+  bottomExtraM: number    // a legalsó darab alsó ráhagyása (csurgó, vagy 0 emelt aljnál)
+  totalLenM: number       // az oszlop teljes (meg nem osztott) gyártási hossza
 }
 
 export interface PlaneResult {

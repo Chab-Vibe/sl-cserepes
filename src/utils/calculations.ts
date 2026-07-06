@@ -1,18 +1,47 @@
-import type { RoofPlane, ColumnResult, PlaneResult, OrderGroup, SheetSegment } from '../types'
+import type { RoofPlane, ColumnResult, PlaneResult, OrderGroup, SheetSegment, SheetTypeId } from '../types'
 
-export const SHEET = {
-  MODULE_M: 0.350,
-  NOSE_M: 0.050,
-  TOTAL_WIDTH_M: 1.1,
-  EFFECTIVE_WIDTH_M: 1.0,
-  // 6 méter fölött a lemez csak felhasználói jóváhagyással gyártható egyben;
-  // egyébként a rendszer toldja, MODULE-határon vágva, fix átfedéssel.
-  MAX_SINGLE_LENGTH_M: 6.0,
-  OVERLAP_M: 0.12,
-  // A legkisebb gyártható lemezhossz — sem az alap kiosztás, sem a kézi/
-  // automatikus megosztás nem hozhat létre ennél rövidebb darabot.
-  MIN_LENGTH_M: 0.82,
-} as const
+export interface SheetProfile {
+  id: SheetTypeId
+  label: string
+  moduleM: number | null      // null = folytonos rendszer, nincs modulosztás
+  noseM: number
+  totalWidthM: number
+  effectiveWidthM: number
+  maxSingleLengthM: number
+  overlapM: number
+  minLengthM: number | null   // null = nincs gyártási minimum
+}
+
+export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
+  cserepeslemez: {
+    id: 'cserepeslemez',
+    label: 'Cserepeslemez',
+    moduleM: 0.350,
+    noseM: 0.050,
+    totalWidthM: 1.1,
+    effectiveWidthM: 1.0,
+    // 6 méter fölött a lemez csak felhasználói jóváhagyással gyártható egyben;
+    // egyébként a rendszer toldja, MODULE-határon vágva, fix átfedéssel.
+    maxSingleLengthM: 6.0,
+    overlapM: 0.12,
+    // A legkisebb gyártható lemezhossz — sem az alap kiosztás, sem a kézi/
+    // automatikus megosztás nem hozhat létre ennél rövidebb darabot.
+    minLengthM: 0.82,
+  },
+  t35: {
+    id: 't35',
+    label: 'T-35 saját gyártás',
+    moduleM: null,
+    noseM: 0,
+    totalWidthM: 1.05,
+    effectiveWidthM: 0.98,
+    maxSingleLengthM: 7.0,
+    overlapM: 0.20,
+    minLengthM: null,
+  },
+}
+
+export const DEFAULT_SHEET_TYPE: SheetTypeId = 'cserepeslemez'
 
 // Y values of the polygon boundary at a given x (scanline)
 function yValuesAtX(points: [number, number][], x: number): number[] {
@@ -64,10 +93,12 @@ function columnExtent(points: [number, number][], colX1: number, colX2: number):
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
 
+// ── Modul-alapú (pl. cserepeslemez) segédfüggvények ──────────────────────
+
 // Nettó magassághoz szükséges egész modulszám (felfelé lépcsőzve).
 // Ha a magasság pontosan modulhatárra esik, +1 modul (5 cm védőzóna elve).
-function moduleCount(netH: number): number {
-  const ratio = netH / SHEET.MODULE_M
+function moduleCount(moduleM: number, netH: number): number {
+  const ratio = netH / moduleM
   let n = Math.ceil(ratio - 1e-9)
   if (Math.abs(ratio - Math.round(ratio)) < 1e-6) n = Math.round(ratio) + 1
   return Math.max(1, n)
@@ -76,8 +107,8 @@ function moduleCount(netH: number): number {
 // Emelt aljú oszlopnál hány teljes modullal kezdődhet feljebb a lemez:
 // a sokszög legalsó pontja ALATTI modulhatárra igazít (lefelé lépcsőzve).
 // Pontos határra esésnél egy modullal lejjebb (itt is védőzóna).
-function moduleFloor(relH: number): number {
-  const ratio = relH / SHEET.MODULE_M
+function moduleFloor(moduleM: number, relH: number): number {
+  const ratio = relH / moduleM
   let n = Math.floor(ratio + 1e-9)
   if (Math.abs(ratio - Math.round(ratio)) < 1e-6) n = Math.round(ratio) - 1
   return Math.max(0, n)
@@ -85,69 +116,40 @@ function moduleFloor(relH: number): number {
 
 // Egy darab tényleges gyártási hossza adott alapmérethez (csurgó/átfedés,
 // esetleg +orr) és modulszámhoz. A BONA Plus tábla szerint 1 modulos lemez
-// nincs (legalább 2 modul mindig kell); 2 modulnál, ha a nyers hossz a 82
-// cm-es minimum alá esne, a darabot pontosan 82 cm-re NYÚJTJUK (nem lépünk
-// egy egész modult tovább). 3 modultól fölfelé a nyers hossz mindig eléri
-// a minimumot, így ott sosem kell nyújtani.
-function finalizeLength(otherLenM: number, modules: number): number {
-  const naturalM = r3(otherLenM + modules * SHEET.MODULE_M)
-  if (modules === 2 && naturalM < SHEET.MIN_LENGTH_M - 1e-9) return SHEET.MIN_LENGTH_M
+// nincs (legalább 2 modul mindig kell); 2 modulnál, ha a nyers hossz a
+// profil gyártási minimuma alá esne, a darabot pontosan a minimumra
+// NYÚJTJUK (nem lépünk egy egész modult tovább). 3 modultól fölfelé a
+// nyers hossz mindig eléri a minimumot, így ott sosem kell nyújtani.
+function finalizeModuleLength(profile: SheetProfile, otherLenM: number, modules: number): number {
+  const naturalM = r3(otherLenM + modules * profile.moduleM!)
+  if (profile.minLengthM !== null && modules === 2 && naturalM < profile.minLengthM - 1e-9) return profile.minLengthM
   return naturalM
-}
-
-// Megosztható-e egyáltalán az oszlop úgy, hogy mindkét darabnak jusson
-// legalább 2-2 modul (a 82 cm-es minimumot a finalizeLength nyújtással úgyis
-// biztosítja, tehát csak a modulszám a korlát).
-export function canSplitColumn(totalModules: number): boolean {
-  return totalModules >= 4
-}
-
-// Az alsó darab megengedett hossztartománya (mm), amivel mindkét darab
-// gyártható marad. null, ha az oszlop egyáltalán nem osztható.
-export function splitBoundsMm(totalModules: number, bottomExtraM: number): { minMm: number; maxMm: number } | null {
-  if (!canSplitColumn(totalModules)) return null
-  const kMax = totalModules - 2
-  return {
-    minMm: Math.round(finalizeLength(bottomExtraM, 2) * 1000),
-    maxMm: Math.round(finalizeLength(bottomExtraM, kMax) * 1000),
-  }
-}
-
-// A megadott (mm-ben kért) alsó-darab-hosszhoz tartozó modulszámot adja
-// vissza. Ha a kért méret belefér a (nyújtott) 2 modulos darabba, azt
-// választja; egyébként felfelé kerekít a legközelebbi elérhető modulhatárra
-// (3 modultól nincs nyújtás, csak a szokásos modulrács).
-export function nearestSplitModules(totalModules: number, bottomExtraM: number, targetBottomM: number): number {
-  const kMax = totalModules - 2
-  const twoModuleLenM = finalizeLength(bottomExtraM, 2)
-  if (targetBottomM <= twoModuleLenM + 1e-9) return Math.min(2, kMax)
-  const k = Math.max(3, Math.ceil((targetBottomM - bottomExtraM) / SHEET.MODULE_M - 1e-9))
-  return Math.min(kMax, k)
 }
 
 // Adott modulszámú lemezoszlopból legyártható szegmenseket épít fel.
 // bottomExtraM: a legalsó darab alsó ráhagyása (csurgó az eresznél, 0 emelt aljnál),
 // startYM: a lemez aljának Y pozíciója a síkon (0 az eresznél, modulrács-vonal emelt aljnál).
-// splitAtModules: felhasználó által kért kézi megosztás — ha a lemez egyébként
-// egyben (nem 6 m fölötti) elférne, mégis az adott modulszámnál (az alsó darab
-// modulmennyisége) két darabra vágja, OVERLAP_M átfedéssel.
-// Ha a teljes hossz 6 m alatt van (és nincs kézi megosztás), vagy a
-// felhasználó engedélyezte az egybefüggő lemezt, egyetlen szegmenst ad
-// vissza. Egyébként modulhatáron vágva toldja, a darabok OVERLAP_M
-// átfedéssel épülnek egymásra, az orr a legfelső darabon van.
-function buildSegments(totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, splitAtModules?: number): SheetSegment[] {
+// splitAtM: felhasználó által kért kézi megosztás (az alsó darab kívánt hossza
+// méterben) — ha a lemez egyébként egyben elférne, mégis a legközelebbi
+// érvényes modulhatárnál két darabra vágja, OVERLAP_M átfedéssel.
+function buildModuleSegments(profile: SheetProfile, totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, splitAtM?: number): SheetSegment[] {
+  const MODULE = profile.moduleM!
   if (totalModules <= 0) return []
 
-  const totalLenM = finalizeLength(bottomExtraM + SHEET.NOSE_M, totalModules)
-  const needsAutoSplit = !allowOversize && totalLenM > SHEET.MAX_SINGLE_LENGTH_M + 1e-9
+  const totalLenM = finalizeModuleLength(profile, bottomExtraM + profile.noseM, totalModules)
+  const needsAutoSplit = !allowOversize && totalLenM > profile.maxSingleLengthM + 1e-9
 
-  if (!needsAutoSplit && splitAtModules !== undefined && canSplitColumn(totalModules)) {
-    const k = nearestSplitModules(totalModules, bottomExtraM, bottomExtraM + splitAtModules * SHEET.MODULE_M)
-    const lenA = finalizeLength(bottomExtraM, k)
-    const lenB = finalizeLength(SHEET.OVERLAP_M + SHEET.NOSE_M, totalModules - k)
+  if (!needsAutoSplit && splitAtM !== undefined && totalModules >= 4) {
+    const kMax = totalModules - 2
+    const twoModuleLenM = finalizeModuleLength(profile, bottomExtraM, 2)
+    const k = splitAtM <= twoModuleLenM + 1e-9
+      ? Math.min(2, kMax)
+      : Math.min(kMax, Math.max(3, Math.ceil((splitAtM - bottomExtraM) / MODULE - 1e-9)))
+    const lenA = finalizeModuleLength(profile, bottomExtraM, k)
+    const lenB = finalizeModuleLength(profile, profile.overlapM + profile.noseM, totalModules - k)
     return [
       { order: 0, modules: k, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
-      { order: 1, modules: totalModules - k, lengthM: lenB, startM: r3(startYM + lenA - SHEET.OVERLAP_M), endM: r3(startYM + lenA - SHEET.OVERLAP_M + lenB) },
+      { order: 1, modules: totalModules - k, lengthM: lenB, startM: r3(startYM + lenA - profile.overlapM), endM: r3(startYM + lenA - profile.overlapM + lenB) },
     ]
   }
 
@@ -161,28 +163,111 @@ function buildSegments(totalModules: number, bottomExtraM: number, startYM: numb
   let order = 0
 
   while (true) {
-    const base = order === 0 ? bottomExtraM : SHEET.OVERLAP_M
-    const finishLenM = finalizeLength(base + SHEET.NOSE_M, remaining)
+    const base = order === 0 ? bottomExtraM : profile.overlapM
+    const finishLenM = finalizeModuleLength(profile, base + profile.noseM, remaining)
 
-    if (finishLenM <= SHEET.MAX_SINGLE_LENGTH_M + 1e-9) {
+    if (finishLenM <= profile.maxSingleLengthM + 1e-9) {
       segments.push({ order, modules: remaining, lengthM: finishLenM, startM: r3(cursorM), endM: r3(cursorM + finishLenM) })
       break
     }
 
     // Nem fér ki egyben: ezt a darabot a lehető legtöbb teljes modullal
-    // töltjük fel a 6 m-es határon belül (orr nélkül, hisz nem itt végződik),
-    // de legalább 2 modult meghagyva a záró darabnak.
-    const maxModulesInCap = Math.floor((SHEET.MAX_SINGLE_LENGTH_M - base) / SHEET.MODULE_M)
+    // töltjük fel a max. gyártási hosszon belül (orr nélkül, hisz nem itt
+    // végződik), de legalább 2 modult meghagyva a záró darabnak.
+    const maxModulesInCap = Math.floor((profile.maxSingleLengthM - base) / MODULE)
     const n = Math.max(2, Math.min(remaining - 2, Math.max(2, maxModulesInCap)))
-    const lenM = finalizeLength(base, n)
+    const lenM = finalizeModuleLength(profile, base, n)
     segments.push({ order, modules: n, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
 
     remaining -= n
-    cursorM = cursorM + lenM - SHEET.OVERLAP_M
+    cursorM = cursorM + lenM - profile.overlapM
     order++
   }
 
   return segments
+}
+
+// ── Folytonos (modulosztás nélküli, pl. T-35) segédfüggvények ────────────
+
+// Nincs rács: a lemez pontosan a szükséges hosszra készül, tetszőleges
+// (mm-pontos) hosszban — csak a gyártási max. hossz és az átfedés korlátoz.
+function buildContinuousSegments(profile: SheetProfile, totalLenM: number, startYM: number, allowOversize: boolean, splitAtM?: number): SheetSegment[] {
+  if (totalLenM <= 1e-9) return []
+  const MAX = profile.maxSingleLengthM
+  const OVERLAP = profile.overlapM
+  const needsAutoSplit = !allowOversize && totalLenM > MAX + 1e-9
+
+  if (!needsAutoSplit && splitAtM !== undefined) {
+    const bounds = continuousSplitBoundsM(profile, totalLenM)
+    if (bounds) {
+      const lenA = r3(Math.min(bounds.maxM, Math.max(bounds.minM, splitAtM)))
+      const lenB = r3(totalLenM - lenA + OVERLAP)
+      return [
+        { order: 0, modules: 0, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
+        { order: 1, modules: 0, lengthM: lenB, startM: r3(startYM + lenA - OVERLAP), endM: r3(startYM + lenA - OVERLAP + lenB) },
+      ]
+    }
+  }
+
+  if (!needsAutoSplit) {
+    const lenM = r3(totalLenM)
+    return [{ order: 0, modules: 0, lengthM: lenM, startM: r3(startYM), endM: r3(startYM + lenM) }]
+  }
+
+  // Automatikus toldás: minden darab pontosan a max. gyártási hosszú, az
+  // utolsó a maradékot fedi.
+  const segments: SheetSegment[] = []
+  const endTarget = startYM + totalLenM
+  let cursorM = startYM
+  let order = 0
+  while (true) {
+    const remainingLen = endTarget - cursorM
+    if (remainingLen <= MAX + 1e-9) {
+      const lenM = r3(remainingLen)
+      segments.push({ order, modules: 0, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
+      break
+    }
+    segments.push({ order, modules: 0, lengthM: MAX, startM: r3(cursorM), endM: r3(cursorM + MAX) })
+    cursorM = cursorM + MAX - OVERLAP
+    order++
+  }
+  return segments
+}
+
+// A folytonos rendszerben a megosztás nem modulhatárhoz, hanem tetszőleges
+// (mm-pontos) hosszhoz igazodik; csak egy kis darabméret-védelem van
+// (min. 10 cm/darab), hogy ne jöhessen létre értelmetlenül rövid szelet.
+const CONTINUOUS_MIN_PIECE_M = 0.1
+
+function continuousSplitBoundsM(profile: SheetProfile, totalLenM: number): { minM: number; maxM: number } | null {
+  const minA = CONTINUOUS_MIN_PIECE_M
+  const maxA = totalLenM + profile.overlapM - CONTINUOUS_MIN_PIECE_M
+  if (maxA < minA) return null
+  return { minM: minA, maxM: maxA }
+}
+
+// ── Profil-agnosztikus, kifelé exportált API ──────────────────────────────
+
+// Megosztható-e egyáltalán az oszlop úgy, hogy mindkét darab gyártható legyen.
+export function canSplitColumn(profile: SheetProfile, col: Pick<ColumnResult, 'totalModules' | 'totalLenM'>): boolean {
+  if (profile.moduleM === null) return continuousSplitBoundsM(profile, col.totalLenM) !== null
+  return col.totalModules >= 4
+}
+
+// Az alsó darab megengedett hossztartománya (mm), amivel mindkét darab
+// gyártható marad. null, ha az oszlop egyáltalán nem osztható.
+export function splitBoundsMm(profile: SheetProfile, col: Pick<ColumnResult, 'totalModules' | 'totalLenM' | 'bottomExtraM'>): { minMm: number; maxMm: number } | null {
+  if (profile.moduleM === null) {
+    const bounds = continuousSplitBoundsM(profile, col.totalLenM)
+    if (!bounds) return null
+    return { minMm: Math.round(bounds.minM * 1000), maxMm: Math.round(bounds.maxM * 1000) }
+  }
+  if (col.totalModules < 4) return null
+  const kMax = col.totalModules - 2
+  return {
+    minMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM, 2) * 1000),
+    maxMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM, kMax) * 1000),
+  }
 }
 
 // A sokszög X tartománya (bounding box), így a pontok lehetnek negatívak is
@@ -206,58 +291,77 @@ export function polyHeight(points: [number, number][]): number {
   return Math.max(...points.map(p => p[1]))
 }
 
-export function getStartOffset(plane: RoofPlane): number {
+export function getStartOffset(plane: RoofPlane, profile: SheetProfile): number {
   const width = polyWidth(plane.points)
   if (width <= 0) return 0
-  const numCols = Math.ceil(width / SHEET.EFFECTIVE_WIDTH_M)
-  const totalSheetWidth = numCols * SHEET.EFFECTIVE_WIDTH_M
+  const numCols = Math.ceil(width / profile.effectiveWidthM)
+  const totalSheetWidth = numCols * profile.effectiveWidthM
   const overhang = totalSheetWidth - width
   if (plane.alignment === 'right') return -overhang
   if (plane.alignment === 'center') return -overhang / 2
   return 0  // left
 }
 
-export function calculatePlane(plane: RoofPlane, allowOversize = false): PlaneResult {
+export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOversize = false): PlaneResult {
   const minX = polyMinX(plane.points)
   const maxX = polyMaxX(plane.points)
   const width = maxX - minX
-  const numCols = Math.ceil(width / SHEET.EFFECTIVE_WIDTH_M)
-  const startX = minX + getStartOffset(plane)
+  const numCols = Math.ceil(width / profile.effectiveWidthM)
+  const startX = minX + getStartOffset(plane, profile)
   const manualSplits = plane.manualSplits ?? []
   const columns: ColumnResult[] = []
 
   for (let i = 0; i < numCols; i++) {
-    const sheetX1 = startX + i * SHEET.EFFECTIVE_WIDTH_M
-    const sheetX2 = sheetX1 + SHEET.EFFECTIVE_WIDTH_M
+    const sheetX1 = startX + i * profile.effectiveWidthM
+    const sheetX2 = sheetX1 + profile.effectiveWidthM
     // Intersect with polygon extent
     const polyX1 = Math.max(minX, sheetX1)
     const polyX2 = Math.min(maxX, sheetX2)
     const ext = polyX2 > polyX1 ? columnExtent(plane.points, polyX1, polyX2) : null
     if (!ext) continue
 
-    // Y=0 a csurgó tövénél van; a modulrács a csurgó fölött indul, és minden
-    // oszlop lemeze erre a közös rácsra igazodik (a cseréphatás sorai így
-    // futnak végig vízszintesen az egész síkon).
-    const netTop = ext.maxY - plane.eaveOverhangM - SHEET.NOSE_M
-    if (netTop <= 1e-9) continue
-    const nTop = moduleCount(netTop)
-
-    // Ha a sokszög alja ebben az oszlopban a csurgó fölött van (átlósan
-    // emelkedő alsó él), a lemez alja a legalsó pont alatti modulhatárra
-    // kerül → lentről felfelé is lépcsőzik a kiosztás.
-    const raised = ext.minY > plane.eaveOverhangM + 1e-6
-    const nBot = raised ? moduleFloor(ext.minY - plane.eaveOverhangM) : 0
-    const startY = raised ? plane.eaveOverhangM + nBot * SHEET.MODULE_M : 0
-    const bottomExtra = raised ? 0 : plane.eaveOverhangM
-    // Legalább 2 modul mindig kell (1 modulos lemez nincs); a 82 cm-es
-    // gyártási minimumot a finalizeLength nyújtással biztosítja, ha épp
-    // 2 modul jönne ki a magasságból.
-    const modules = Math.max(2, nTop - nBot)
-
     const manualSplit = manualSplits.find(s => s.col === i)
-    const segments = buildSegments(modules, bottomExtra, startY, allowOversize, manualSplit?.modules)
-    if (segments.length > 0) {
-      columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra })
+
+    if (profile.moduleM !== null) {
+      const MODULE = profile.moduleM
+      // Y=0 a csurgó tövénél van; a modulrács a csurgó fölött indul, és minden
+      // oszlop lemeze erre a közös rácsra igazodik (a cseréphatás sorai így
+      // futnak végig vízszintesen az egész síkon).
+      const netTop = ext.maxY - plane.eaveOverhangM - profile.noseM
+      if (netTop <= 1e-9) continue
+      const nTop = moduleCount(MODULE, netTop)
+
+      // Ha a sokszög alja ebben az oszlopban a csurgó fölött van (átlósan
+      // emelkedő alsó él), a lemez alja a legalsó pont alatti modulhatárra
+      // kerül → lentről felfelé is lépcsőzik a kiosztás.
+      const raised = ext.minY > plane.eaveOverhangM + 1e-6
+      const nBot = raised ? moduleFloor(MODULE, ext.minY - plane.eaveOverhangM) : 0
+      const startY = raised ? plane.eaveOverhangM + nBot * MODULE : 0
+      const bottomExtra = raised ? 0 : plane.eaveOverhangM
+      // Legalább 2 modul mindig kell (1 modulos lemez nincs); a gyártási
+      // minimumot a finalizeModuleLength nyújtással biztosítja.
+      const modules = Math.max(2, nTop - nBot)
+      const totalLenM = finalizeModuleLength(profile, bottomExtra + profile.noseM, modules)
+
+      const segments = buildModuleSegments(profile, modules, bottomExtra, startY, allowOversize, manualSplit?.atM)
+      if (segments.length > 0) {
+        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM })
+      }
+    } else {
+      // Folytonos (modulosztás nélküli) profil: nincs rács, a lemez pontosan
+      // a szükséges hosszra készül; csurgó csak azoknál az oszlopoknál adódik
+      // hozzá, amelyek ténylegesen az ereszt érik.
+      const raised = ext.minY > plane.eaveOverhangM + 1e-6
+      const startY = raised ? ext.minY : 0
+      const bottomExtra = raised ? 0 : plane.eaveOverhangM
+      const coverageM = ext.maxY - startY
+      if (coverageM <= 1e-9) continue
+      const totalLenM = r3(coverageM + bottomExtra)
+
+      const segments = buildContinuousSegments(profile, totalLenM, startY, allowOversize, manualSplit?.atM)
+      if (segments.length > 0) {
+        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: 0, bottomExtraM: bottomExtra, totalLenM })
+      }
     }
   }
 
@@ -292,24 +396,24 @@ export function totalSheets(groups: OrderGroup[]): number {
   return groups.reduce((s, g) => s + g.totalSheets, 0)
 }
 
-// Anyagszükséglet: a lemez TELJES szélességével (1,1 m) — ennyi anyagot kell
+// Anyagszükséglet: a lemez TELJES szélességével — ennyi anyagot kell
 // ténylegesen megrendelni/kifizetni, mert minden lemez ilyen szélességben készül.
-export function groupMaterialAreaM2(g: OrderGroup): number {
-  return g.lengthM * g.totalSheets * SHEET.TOTAL_WIDTH_M
+export function groupMaterialAreaM2(g: OrderGroup, profile: SheetProfile): number {
+  return g.lengthM * g.totalSheets * profile.totalWidthM
 }
 
-export function totalMaterialAreaM2(groups: OrderGroup[]): number {
-  return groups.reduce((s, g) => s + groupMaterialAreaM2(g), 0)
+export function totalMaterialAreaM2(groups: OrderGroup[], profile: SheetProfile): number {
+  return groups.reduce((s, g) => s + groupMaterialAreaM2(g, profile), 0)
 }
 
-// Tetőfelület szükséglet: a lemez HASZNOS szélességével (1,0 m) — ennyi
-// tényleges tetőfelületet fed le a lemez (az átfedő rész nem számít bele).
-export function groupCoverageAreaM2(g: OrderGroup): number {
-  return g.lengthM * g.totalSheets * SHEET.EFFECTIVE_WIDTH_M
+// Tetőfelület szükséglet: a lemez HASZNOS szélességével — ennyi tényleges
+// tetőfelületet fed le a lemez (az átfedő rész nem számít bele).
+export function groupCoverageAreaM2(g: OrderGroup, profile: SheetProfile): number {
+  return g.lengthM * g.totalSheets * profile.effectiveWidthM
 }
 
-export function totalCoverageAreaM2(groups: OrderGroup[]): number {
-  return groups.reduce((s, g) => s + groupCoverageAreaM2(g), 0)
+export function totalCoverageAreaM2(groups: OrderGroup[], profile: SheetProfile): number {
+  return groups.reduce((s, g) => s + groupCoverageAreaM2(g, profile), 0)
 }
 
 export function isPlaneValid(plane: RoofPlane): boolean {

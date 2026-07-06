@@ -1,10 +1,12 @@
 import type { PlaneResult } from '../../types'
+import type { SheetProfile } from '../../utils/calculations'
 
 interface Props {
   results: PlaneResult[]
+  profile: SheetProfile
 }
 
-export function ResultsTable({ results }: Props) {
+export function ResultsTable({ results, profile }: Props) {
   if (results.length === 0) return null
 
   return (
@@ -27,7 +29,7 @@ export function ResultsTable({ results }: Props) {
               <thead>
                 <tr className="text-slate-400 border-b border-slate-100">
                   <th className="text-left pb-1 font-normal">Lemezhossz</th>
-                  <th className="text-left pb-1 font-normal">Modul</th>
+                  {profile.moduleM !== null && <th className="text-left pb-1 font-normal">Modul</th>}
                   <th className="text-right pb-1 font-normal">Lemez</th>
                 </tr>
               </thead>
@@ -35,7 +37,9 @@ export function ResultsTable({ results }: Props) {
                 {entries.map(([len, info]) => (
                   <tr key={len} className="border-b border-slate-50 last:border-0">
                     <td className="py-1 text-slate-700">{len.toFixed(3)} m</td>
-                    <td className="py-1 text-slate-400">{info.modules} × 350 mm</td>
+                    {profile.moduleM !== null && (
+                      <td className="py-1 text-slate-400">{info.modules} × {profile.moduleM * 1000} mm</td>
+                    )}
                     <td className="py-1 text-right text-blue-600 font-semibold">{info.count} db</td>
                   </tr>
                 ))}

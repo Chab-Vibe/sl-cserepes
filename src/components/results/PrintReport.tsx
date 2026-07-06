@@ -1,18 +1,19 @@
 import type { PlaneResult, OrderGroup } from '../../types'
-import { groupByLength, totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, SHEET } from '../../utils/calculations'
+import { groupByLength, totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   results: PlaneResult[]
+  profile: SheetProfile
 }
 
-export function PrintReport({ results }: Props) {
+export function PrintReport({ results, profile }: Props) {
   if (results.length === 0) return null
 
   // Összesített rendelési tábla (minden sík együtt)
   const groups: OrderGroup[] = groupByLength(results)
   const total = totalSheets(groups)
-  const totalArea = totalMaterialAreaM2(groups)
-  const coverageArea = totalCoverageAreaM2(groups)
+  const totalArea = totalMaterialAreaM2(groups, profile)
+  const coverageArea = totalCoverageAreaM2(groups, profile)
 
   return (
     <div className="hidden print:block">
@@ -20,7 +21,7 @@ export function PrintReport({ results }: Props) {
       {/* ── 1. oldal: összesített rendelési táblázat ── */}
       <div className="mb-6">
         <h2 className="text-base font-bold text-gray-900 mb-3 border-b border-gray-400 pb-1">
-          Rendelési összesítő
+          Rendelési összesítő — {profile.label}
         </h2>
         <table className="w-full text-xs border-collapse border border-slate-400">
           <thead>
@@ -43,7 +44,7 @@ export function PrintReport({ results }: Props) {
                   {g.totalSheets}
                 </td>
                 <td className="border border-slate-300 px-2 py-1 text-right text-gray-700">
-                  {groupMaterialAreaM2(g).toFixed(2)}
+                  {groupMaterialAreaM2(g, profile).toFixed(2)}
                 </td>
                 <td className="border border-slate-300 px-2 py-1 text-gray-500">
                   {g.planeNames.join(', ')}
@@ -61,7 +62,7 @@ export function PrintReport({ results }: Props) {
           </tfoot>
         </table>
         <p className="text-[10px] text-gray-500 mt-1.5">
-          A terület a lemez teljes szélességével (1,1 m) számolt anyagszükséglet. Tetőfelület szükséglet (hasznos {SHEET.EFFECTIVE_WIDTH_M * 1000} mm szélességgel): <strong>{coverageArea.toFixed(2)} m²</strong>
+          A terület a lemez teljes szélességével ({profile.totalWidthM} m) számolt anyagszükséglet. Tetőfelület szükséglet (hasznos {profile.effectiveWidthM * 1000} mm szélességgel): <strong>{coverageArea.toFixed(2)} m²</strong>
         </p>
       </div>
 

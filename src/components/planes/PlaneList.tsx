@@ -1,9 +1,10 @@
 import { useStore } from '../../store/useStore'
-import { calculatePlane } from '../../utils/calculations'
+import { calculatePlane, SHEET_PROFILES } from '../../utils/calculations'
 import { PlaneCard } from './PlaneCard'
 
 export function PlaneList() {
-  const { planes, allowOversize, updatePlane, removePlane, duplicatePlane } = useStore()
+  const { planes, allowOversize, sheetType, updatePlane, removePlane, duplicatePlane } = useStore()
+  const profile = SHEET_PROFILES[sheetType]
 
   if (planes.length === 0) {
     return (
@@ -19,7 +20,8 @@ export function PlaneList() {
         <PlaneCard
           key={plane.id}
           plane={plane}
-          result={calculatePlane(plane, allowOversize)}
+          result={calculatePlane(plane, profile, allowOversize)}
+          profile={profile}
           onChange={patch => updatePlane(plane.id, patch)}
           onRemove={() => removePlane(plane.id)}
           onDuplicate={() => duplicatePlane(plane.id)}

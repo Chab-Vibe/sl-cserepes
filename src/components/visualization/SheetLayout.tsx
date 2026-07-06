@@ -1,9 +1,10 @@
 import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
-import { polyMinX, polyMaxX, polyHeight, SHEET, getStartOffset, canSplitColumn } from '../../utils/calculations'
+import { polyMinX, polyMaxX, polyHeight, getStartOffset, canSplitColumn, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
   result: PlaneResult
+  profile: SheetProfile
   onSelectColumn?: (colIndex: number) => void
   selectedCol?: number | null
   // Kozmetikai (betűméret/jelölésméret) szorzó — a geometria (SVG_W/H, PAD,
@@ -12,7 +13,7 @@ interface Props {
   fontScale?: number
 }
 
-export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null, fontScale = 1 }: Props) {
+export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCol = null, fontScale = 1 }: Props) {
   if (plane.points.length < 3 || result.columns.length === 0) return null
 
   const FS = fontScale
@@ -20,9 +21,9 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
   const minX = polyMinX(plane.points)
   const maxX = polyMaxX(plane.points) || 1
   const maxY = polyHeight(plane.points) || 1
-  const startX = minX + getStartOffset(plane)
+  const startX = minX + getStartOffset(plane, profile)
   const numCols = result.columns.length
-  const totalSheetW = numCols * SHEET.EFFECTIVE_WIDTH_M
+  const totalSheetW = numCols * profile.effectiveWidthM
   const overhangLeft  = Math.max(0, minX - startX)
   const overhangRight = Math.max(0, startX + totalSheetW - maxX)
   const manualSplits = plane.manualSplits ?? []
@@ -59,8 +60,8 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
   const OVERLAP_HATCH_ID = `ohatch-${plane.id}-${fontScale}`
 
   function colWorldX(col: PlaneResult['columns'][number]) {
-    const x1 = startX + col.index * SHEET.EFFECTIVE_WIDTH_M
-    return { x1, x2: x1 + SHEET.EFFECTIVE_WIDTH_M }
+    const x1 = startX + col.index * profile.effectiveWidthM
+    return { x1, x2: x1 + profile.effectiveWidthM }
   }
 
   const alignLabel = plane.alignment === 'left' ? 'Bal' : plane.alignment === 'right' ? 'Jobb' : 'Közép'
@@ -78,7 +79,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
         Kiosztási rajz — {plane.name}
         {overhangLeft > 0.001 && <span className="ml-2 text-amber-600">◄ {(overhangLeft*100).toFixed(0)} cm túlnyúlás bal</span>}
         {overhangRight > 0.001 && <span className="ml-2 text-amber-600">► {(overhangRight*100).toFixed(0)} cm túlnyúlás jobb</span>}
-        {hasSplit && <span className="ml-2 text-rose-500">⚠ toldott lemez ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedés)</span>}
+        {hasSplit && <span className="ml-2 text-rose-500">⚠ toldott lemez ({Math.round(profile.overlapM * 1000)} mm átfedés)</span>}
       </h3>
 
       <div className="rounded-xl overflow-hidden border border-slate-200 print:border-gray-300 print:rounded-none bg-white">
@@ -96,7 +97,9 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
 
           {/* ── Title ── */}
           <text x={SVG_W / 2} y={16} textAnchor="middle" fill="#333" fontSize={10 * FS} fontFamily="Arial,sans-serif" fontWeight="bold">
-            {plane.name}  ·  Igazítás: {alignLabel}  ·  Modul: {SHEET.MODULE_M * 1000} mm  ·  Hasznos szélesség: {SHEET.EFFECTIVE_WIDTH_M * 1000} mm
+            {plane.name}  ·  Igazítás: {alignLabel}
+            {profile.moduleM !== null && `  ·  Modul: ${profile.moduleM * 1000} mm`}
+            {`  ·  Hasznos szélesség: ${profile.effectiveWidthM * 1000} mm`}
           </text>
 
           {/* ── SHEET COLUMNS ── */}
@@ -108,9 +111,10 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
             const cx = (sx1 + sx2) / 2
             const isManualSplit = manualSplits.some(s => s.col === col.index)
             // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
-            // 6 m fölötti magasság miatt automatikusan toldva, és a darab elég
-            // hosszú ahhoz, hogy mindkét fele elérje a gyártási minimumot.
-            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(col.totalModules))
+            // automatikusan toldva (max. gyártási hossz fölötti magasság
+            // miatt), és a darab elég hosszú ahhoz, hogy mindkét fele
+            // gyártható legyen.
+            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(profile, col))
             const isSelected = selectedCol === col.index
             const colBottomM = col.segments.length ? col.segments[0].startM : 0
             const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
@@ -149,7 +153,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
                 {/* Overlap bands between consecutive segments */}
                 {col.segments.slice(1).map((seg) => {
                   const overlapStart = seg.startM
-                  const overlapEnd = seg.startM + SHEET.OVERLAP_M
+                  const overlapEnd = seg.startM + profile.overlapM
                   const [, obTop] = toSvg(wx1, overlapEnd)
                   const [, obBot] = toSvg(wx1, overlapStart)
                   return (
@@ -159,7 +163,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
                 })}
 
                 {/* Click-to-select overlay: kiválasztja az oszlopot kézi
-                    megosztás megadásához (ha nincs 6 m fölötti auto-toldás) */}
+                    megosztás megadásához (ha nincs automatikus toldás) */}
                 {onSelectColumn && isSelectable && (
                   <rect
                     x={sx1} y={colSyTop} width={colPx} height={colSyBot - colSyTop}
@@ -180,7 +184,7 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
           {/* ── Column separator lines (clipped inside polygon) ── */}
           {result.columns.map((col) => {
             if (col.index === 0) return null
-            const wx = startX + col.index * SHEET.EFFECTIVE_WIDTH_M
+            const wx = startX + col.index * profile.effectiveWidthM
             const [sx] = toSvg(wx, 0)
             const [, syB] = toSvg(wx, 0)
             const [, syT] = toSvg(wx, maxY * 1.05)
@@ -313,12 +317,15 @@ export function SheetLayout({ plane, result, onSelectColumn, selectedCol = null,
                   const cnt = allSegments.filter(s => s.lengthM === len).length
                   const seg = allSegments.find(s => s.lengthM === len)!
                   const ly = legendY0 - (uniqueLengths.length - 1 - i) * 14 * FS
-                  const overLimit = len > SHEET.MAX_SINGLE_LENGTH_M
+                  const overLimit = len > profile.maxSingleLengthM
+                  const moduleInfo = profile.moduleM !== null
+                    ? ` (${seg.modules}×${profile.moduleM * 1000}+${Math.round((len - seg.modules * profile.moduleM) * 1000)})`
+                    : ''
                   return (
                     <g key={len}>
                       <rect x={legendX} y={ly - 9 * FS} width={9 * FS} height={9 * FS} fill={overLimit ? '#fecaca' : '#ddd'} stroke={overLimit ? '#dc2626' : '#888'} strokeWidth={0.6} rx={1} />
                       <text x={legendX + 13 * FS} y={ly} fill="#333" fontSize={8.5 * FS} fontFamily="Arial,sans-serif">
-                        {Math.round(len * 1000)} mm — {cnt} db  ({seg.modules}×350+{Math.round((len - seg.modules * SHEET.MODULE_M) * 1000)})
+                        {Math.round(len * 1000)} mm — {cnt} db{moduleInfo}
                       </text>
                     </g>
                   )

@@ -3,11 +3,12 @@ import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
-import { isPlaneValid, polyWidth, polyHeight, nearestSplitModules, splitBoundsMm, SHEET } from '../../utils/calculations'
+import { isPlaneValid, polyWidth, polyHeight, splitBoundsMm, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
   result: PlaneResult
+  profile: SheetProfile
   onChange: (patch: Partial<RoofPlane>) => void
   onRemove: () => void
   onDuplicate: () => void
@@ -19,7 +20,7 @@ const ALIGN_OPTS: { value: Alignment; icon: React.ReactNode; label: string }[] =
   { value: 'right',  icon: <AlignRight size={16} />,  label: 'Jobb' },
 ]
 
-export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Props) {
+export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplicate }: Props) {
   const valid = isPlaneValid(plane)
   const [selectedCol, setSelectedCol] = useState<number | null>(null)
 
@@ -33,15 +34,14 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
   const w = polyWidth(plane.points)
   const h = polyHeight(plane.points)
   const splitCount = result.columns.filter(c => c.isSplit).length
-  const oversizeCount = result.columns.filter(c => c.segments.some(s => s.lengthM > SHEET.MAX_SINGLE_LENGTH_M)).length
+  const oversizeCount = result.columns.filter(c => c.segments.some(s => s.lengthM > profile.maxSingleLengthM)).length
 
   const selectColumn = (colIndex: number) => setSelectedCol(prev => prev === colIndex ? null : colIndex)
   const selectedColResult = selectedCol !== null ? result.columns.find(c => c.index === selectedCol) : undefined
 
-  const applySplit = (colIndex: number, col: PlaneResult['columns'][number], mm: number) => {
-    const modules = nearestSplitModules(col.totalModules, col.bottomExtraM, mm / 1000)
+  const applySplit = (colIndex: number, mm: number) => {
     const others = (plane.manualSplits ?? []).filter(s => s.col !== colIndex)
-    onChange({ manualSplits: [...others, { col: colIndex, modules }] })
+    onChange({ manualSplits: [...others, { col: colIndex, atM: mm / 1000 }] })
   }
   const removeSplit = (colIndex: number) => {
     const others = (plane.manualSplits ?? []).filter(s => s.col !== colIndex)
@@ -125,13 +125,13 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           {splitCount > 0 && (
             <div className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
               <AlertTriangle size={15} className="shrink-0" />
-              {splitCount} oszlop toldva ({Math.round(SHEET.OVERLAP_M * 1000)} mm átfedéssel)
+              {splitCount} oszlop toldva ({Math.round(profile.overlapM * 1000)} mm átfedéssel)
             </div>
           )}
           {oversizeCount > 0 && (
             <div className="flex items-center gap-1.5 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
               <AlertTriangle size={15} className="shrink-0" />
-              {oversizeCount} egybefüggő lemez 6 m fölött — egyeztess a gyártóval
+              {oversizeCount} egybefüggő lemez {profile.maxSingleLengthM} m fölött — egyeztess a gyártóval
             </div>
           )}
         </div>
@@ -141,17 +141,18 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
           eredeti (változatlan) mérettel */}
       {valid && (
         <div className="print:hidden">
-          <SheetLayout plane={plane} result={result} onSelectColumn={selectColumn} selectedCol={selectedCol} fontScale={1.4} />
+          <SheetLayout plane={plane} result={result} profile={profile} onSelectColumn={selectColumn} selectedCol={selectedCol} fontScale={1.4} />
         </div>
       )}
       {valid && (
         <div className="hidden print:block">
-          <SheetLayout plane={plane} result={result} />
+          <SheetLayout plane={plane} result={result} profile={profile} />
         </div>
       )}
       {valid && (
         <p className="text-slate-300 text-xs mt-1 print:hidden">
-          Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet, a rendszer a legközelebbi modulhoz igazítja.
+          Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet
+          {profile.moduleM !== null ? ', a rendszer a legközelebbi modulhoz igazítja.' : '.'}
         </p>
       )}
 
@@ -164,24 +165,24 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
         if (isAutoLocked) {
           return (
             <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
-              <span>Ez az oszlop automatikusan toldva van (6 m fölötti magasság) — kézi megosztás nem szükséges.</span>
+              <span>Ez az oszlop automatikusan toldva van ({profile.maxSingleLengthM} m fölötti magasság) — kézi megosztás nem szükséges.</span>
               <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
             </div>
           )
         }
 
-        const bounds = splitBoundsMm(col.totalModules, col.bottomExtraM)
+        const bounds = splitBoundsMm(profile, col)
         if (!bounds) {
           return (
             <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
-              <span>Ez a lemez túl rövid ahhoz, hogy két, a {Math.round(SHEET.MIN_LENGTH_M * 1000)} mm-es gyártási minimumot elérő darabra osztható legyen.</span>
+              <span>Ez a lemez túl rövid ahhoz, hogy két gyártható darabra osztható legyen.</span>
               <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
             </div>
           )
         }
 
         // A ténylegesen alkalmazott (nyújtott/kerekített) hosszt az aktuális
-        // szegmensekből olvassuk ki, nem a nyers modul-képletből — így a mező
+        // szegmensekből olvassuk ki, nem a nyers képletből — így a mező
         // Alkalmazás után a valódi gyártási méretet mutatja (pl. 750 → 820).
         const defaultTargetMm = existing && col.segments.length === 2
           ? Math.round(col.segments[0].lengthM * 1000)
@@ -193,7 +194,7 @@ export function PlaneCard({ plane, result, onChange, onRemove, onDuplicate }: Pr
             onSubmit={e => {
               e.preventDefault()
               const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
-              if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, col, mm)
+              if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, mm)
             }}
             className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-sm print:hidden"
           >

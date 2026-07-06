@@ -1,13 +1,14 @@
 import { Copy, Check } from 'lucide-react'
 import { useState } from 'react'
 import type { OrderGroup } from '../../types'
-import { totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, SHEET } from '../../utils/calculations'
+import { totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   groups: OrderGroup[]
+  profile: SheetProfile
 }
 
-export function ResultsSummary({ groups }: Props) {
+export function ResultsSummary({ groups, profile }: Props) {
   const [copied, setCopied] = useState(false)
   const total = totalSheets(groups)
 
@@ -55,13 +56,13 @@ export function ResultsSummary({ groups }: Props) {
             <tr key={g.lengthM}>
               <td className="py-1.5 text-slate-700 font-medium">
                 {Math.round(g.lengthM * 1000)} mm
-                {g.lengthM > SHEET.MAX_SINGLE_LENGTH_M && (
-                  <span className="ml-1.5 text-rose-500 text-xs font-semibold">6M+</span>
+                {g.lengthM > profile.maxSingleLengthM && (
+                  <span className="ml-1.5 text-rose-500 text-xs font-semibold">{profile.maxSingleLengthM}M+</span>
                 )}
               </td>
               <td className="py-1.5 text-right text-blue-600 font-bold">{g.totalSheets} db</td>
               <td className="py-1.5 text-right text-slate-400 text-sm pl-3">
-                {groupMaterialAreaM2(g).toFixed(2)} m²
+                {groupMaterialAreaM2(g, profile).toFixed(2)} m²
               </td>
             </tr>
           ))}
@@ -71,15 +72,15 @@ export function ResultsSummary({ groups }: Props) {
             <td className="pt-2 text-slate-500 text-base font-medium">Összesen</td>
             <td className="pt-2 text-right text-slate-800 font-bold text-xl">{total} db</td>
             <td className="pt-2 text-right text-slate-400 text-sm pl-3">
-              {totalMaterialAreaM2(groups).toFixed(2)} m²
+              {totalMaterialAreaM2(groups, profile).toFixed(2)} m²
             </td>
           </tr>
         </tfoot>
       </table>
 
       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
-        <span className="text-slate-400">Tetőfelület szükséglet (hasznos {SHEET.EFFECTIVE_WIDTH_M * 1000} mm):</span>
-        <span className="text-slate-600 font-semibold">{totalCoverageAreaM2(groups).toFixed(2)} m²</span>
+        <span className="text-slate-400">Tetőfelület szükséglet (hasznos {profile.effectiveWidthM * 1000} mm):</span>
+        <span className="text-slate-600 font-semibold">{totalCoverageAreaM2(groups, profile).toFixed(2)} m²</span>
       </div>
     </div>
   )
