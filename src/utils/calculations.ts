@@ -65,8 +65,9 @@ function yValuesAtX(points: [number, number][], x: number): number[] {
 }
 
 // Polygon min/max Y within a 1m-wide column strip.
-// A minimum is kell: ha a sokszög alja átlósan emelkedik (lentről felfelé
-// csökkenő sík), a lemez alja is feljebb kerül, modulrácsra lépcsőzve.
+// A minY lehet negatív is: ha a sík alja egy adott oszlopban a csurgó (y=0)
+// alá lóg (pl. lépcsős tetőforma, alacsonyabb toldalék), azt a lemez
+// tényleges lefedésébe be kell számítani, nem eldobni.
 function columnExtent(points: [number, number][], colX1: number, colX2: number): { minY: number; maxY: number } | null {
   if (points.length < 3) return null
   let minY = Infinity
@@ -88,7 +89,7 @@ function columnExtent(points: [number, number][], colX1: number, colX2: number):
     }
   }
   if (!isFinite(maxY) || maxY <= 0) return null
-  return { minY: Math.max(0, minY), maxY }
+  return { minY, maxY }
 }
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
@@ -326,27 +327,44 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
 
     const manualSplit = manualSplits.find(s => s.col === i)
 
+    // Ha a sík alja ebben az oszlopban a csurgó (y=0) fölött van (átlósan
+    // emelkedő alsó él, pl. kontyolt sarok), a lemez a legalsó pont alatti
+    // modulhatárra igazodik, fizikai csurgó-túlnyúlás nélkül (nem éri el a
+    // valódi ereszvonalat). Egyébként — akár pontosan y=0-nál, akár az ALÁ
+    // lógva (pl. lépcsős tetőforma, alacsonyabb toldalék) — az oszlop eléri
+    // a saját (helyi) ereszvonalát, ott kapja meg a fizikai túlnyúlást, a
+    // lemez pedig a TÉNYLEGES legalsó pontból indul, nem egy rögzített 0-ból.
+    const raised = ext.minY > plane.eaveOverhangM + 1e-6
+
     if (profile.moduleM !== null) {
       const MODULE = profile.moduleM
-      // Y=0 a csurgó tövénél van; a modulrács a csurgó fölött indul, és minden
-      // oszlop lemeze erre a közös rácsra igazodik (a cseréphatás sorai így
-      // futnak végig vízszintesen az egész síkon).
-      const netTop = ext.maxY - plane.eaveOverhangM - profile.noseM
-      if (netTop <= 1e-9) continue
-      const nTop = moduleCount(MODULE, netTop)
+      let modules: number
+      let startY: number
+      let bottomExtra: number
 
-      // Ha a sokszög alja ebben az oszlopban a csurgó fölött van (átlósan
-      // emelkedő alsó él), a lemez alja a legalsó pont alatti modulhatárra
-      // kerül → lentről felfelé is lépcsőzik a kiosztás.
-      const raised = ext.minY > plane.eaveOverhangM + 1e-6
-      const nBot = raised ? moduleFloor(MODULE, ext.minY - plane.eaveOverhangM) : 0
-      const startY = raised ? plane.eaveOverhangM + nBot * MODULE : 0
-      const bottomExtra = raised ? 0 : plane.eaveOverhangM
-      // Legalább 2 modul mindig kell (1 modulos lemez nincs); a gyártási
-      // minimumot a finalizeModuleLength nyújtással biztosítja.
-      const modules = Math.max(2, nTop - nBot)
+      if (raised) {
+        // Y=0 a csurgó tövénél van; a modulrács a csurgó fölött indul, és
+        // minden ilyen oszlop lemeze erre a közös rácsra igazodik (a
+        // cseréphatás sorai így futnak végig vízszintesen az egész síkon).
+        const netTop = ext.maxY - plane.eaveOverhangM - profile.noseM
+        if (netTop <= 1e-9) continue
+        const nTop = moduleCount(MODULE, netTop)
+        const nBot = moduleFloor(MODULE, ext.minY - plane.eaveOverhangM)
+        modules = Math.max(2, nTop - nBot)
+        startY = plane.eaveOverhangM + nBot * MODULE
+        bottomExtra = 0
+      } else {
+        // A tényleges lefedendő magasság a sík valódi alja (ext.minY, akár
+        // negatív is) és teteje között — nem csak a maxY-eave.
+        const coverageM = ext.maxY - ext.minY
+        const netTop = coverageM - plane.eaveOverhangM - profile.noseM
+        if (netTop <= 1e-9) continue
+        modules = Math.max(2, moduleCount(MODULE, netTop))
+        startY = ext.minY
+        bottomExtra = plane.eaveOverhangM
+      }
+
       const totalLenM = finalizeModuleLength(profile, bottomExtra + profile.noseM, modules)
-
       const segments = buildModuleSegments(profile, modules, bottomExtra, startY, allowOversize, manualSplit?.atM)
       if (segments.length > 0) {
         columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM })
@@ -354,9 +372,8 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
     } else {
       // Folytonos (modulosztás nélküli) profil: nincs rács, a lemez pontosan
       // a szükséges hosszra készül; csurgó csak azoknál az oszlopoknál adódik
-      // hozzá, amelyek ténylegesen az ereszt érik.
-      const raised = ext.minY > plane.eaveOverhangM + 1e-6
-      const startY = raised ? ext.minY : 0
+      // hozzá, amelyek ténylegesen elérik a (helyi) ereszvonalukat.
+      const startY = ext.minY
       const bottomExtra = raised ? 0 : plane.eaveOverhangM
       const coverageM = ext.maxY - startY
       if (coverageM <= 1e-9) continue
