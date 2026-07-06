@@ -1,5 +1,5 @@
 import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
-import { polyMinX, polyMaxX, polyHeight, getStartOffset, canSplitColumn, type SheetProfile } from '../../utils/calculations'
+import { polyMinX, polyMaxX, polyHeight, getStartOffset, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
@@ -58,6 +58,7 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
   const polyPtStr = plane.points.map(([wx, wy]) => toSvg(wx, wy).join(',')).join(' ')
   const clipId = `lc-${plane.id}-${fontScale}`
   const OVERLAP_HATCH_ID = `ohatch-${plane.id}-${fontScale}`
+  const EXCLUDED_HATCH_ID = `xhatch-${plane.id}-${fontScale}`
 
   function colWorldX(col: PlaneResult['columns'][number]) {
     const x1 = startX + col.index * profile.effectiveWidthM
@@ -68,10 +69,12 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
   const totalWidthMm = Math.round((maxX - minX) * 1000)
   const totalSheetWidthMm = Math.round(totalSheetW * 1000)
 
-  // Collect unique segment lengths for legend
-  const allSegments = result.columns.flatMap(c => c.segments)
+  // Collect unique segment lengths for legend — a kihagyott (hulladékból
+  // pótolt) oszlopok nem számítanak bele a rendelési összesítőbe.
+  const allSegments = result.columns.filter(c => !c.excluded).flatMap(c => c.segments)
   const uniqueLengths = [...new Set(allSegments.map(s => s.lengthM))].sort((a, b) => a - b)
   const hasSplit = result.columns.some(c => c.isSplit)
+  const hasExcluded = result.columns.some(c => c.excluded)
 
   return (
     <div className="mt-4 sheet-layout-wrapper">
@@ -80,6 +83,7 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
         {overhangLeft > 0.001 && <span className="ml-2 text-amber-600">◄ {(overhangLeft*100).toFixed(0)} cm túlnyúlás bal</span>}
         {overhangRight > 0.001 && <span className="ml-2 text-amber-600">► {(overhangRight*100).toFixed(0)} cm túlnyúlás jobb</span>}
         {hasSplit && <span className="ml-2 text-rose-500">⚠ toldott lemez ({Math.round(profile.overlapM * 1000)} mm átfedés)</span>}
+        {hasExcluded && <span className="ml-2 text-slate-400">⊘ kihagyott oszlop (hulladékból pótolva)</span>}
       </h3>
 
       <div className="rounded-xl overflow-hidden border border-slate-200 print:border-gray-300 print:rounded-none bg-white">
@@ -88,6 +92,10 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
             {/* Hatch for sheet-to-sheet overlap */}
             <pattern id={OVERLAP_HATCH_ID} patternUnits="userSpaceOnUse" width={6} height={6} patternTransform="rotate(-45)">
               <line x1={0} y1={0} x2={0} y2={6} stroke="#d97706" strokeWidth={1.4} />
+            </pattern>
+            {/* Hatch for excluded (rendelésből kihagyott) columns */}
+            <pattern id={EXCLUDED_HATCH_ID} patternUnits="userSpaceOnUse" width={7} height={7} patternTransform="rotate(45)">
+              <line x1={0} y1={0} x2={0} y2={7} stroke="#cbd5e1" strokeWidth={2} />
             </pattern>
             {/* Clip to polygon (only for separator lines) */}
             <clipPath id={clipId}>
@@ -110,11 +118,6 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
             const colPx = sx2 - sx1
             const cx = (sx1 + sx2) / 2
             const isManualSplit = manualSplits.some(s => s.col === col.index)
-            // Kézzel csak akkor (de)aktiválható a megosztás, ha az oszlop nincs
-            // automatikusan toldva (max. gyártási hossz fölötti magasság
-            // miatt), és a darab elég hosszú ahhoz, hogy mindkét fele
-            // gyártható legyen.
-            const isSelectable = isManualSplit || (col.segments.length === 1 && canSplitColumn(profile, col))
             const isSelected = selectedCol === col.index
             const colBottomM = col.segments.length ? col.segments[0].startM : 0
             const colTopM = col.segments.length ? col.segments[col.segments.length - 1].endM : 0
@@ -130,15 +133,17 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
                   const segH = segSyBot - segSyTop
                   const cySeg = (segSyTop + segSyBot) / 2
                   const lenMm = Math.round(seg.lengthM * 1000)
+                  const fill = col.excluded ? `url(#${EXCLUDED_HATCH_ID})` : isSelected ? '#eff6ff' : 'white'
+                  const stroke = col.excluded ? '#94a3b8' : isSelected ? '#2563eb' : '#888'
                   return (
                     <g key={seg.order}>
                       <rect x={sx1} y={segSyTop} width={colPx} height={segH}
-                        fill={isSelected ? '#eff6ff' : 'white'} stroke={isSelected ? '#2563eb' : '#888'} strokeWidth={isSelected ? 1.4 : 0.8} />
+                        fill={fill} stroke={stroke} strokeWidth={isSelected ? 1.4 : 0.8} />
                       {colPx > 14 && segH > 12 && (
                         <text
                           x={cx} y={cySeg}
                           textAnchor="middle" dominantBaseline="middle"
-                          fill="#111"
+                          fill={col.excluded ? '#94a3b8' : '#111'}
                           fontSize={(colPx > 40 ? 11 : colPx > 22 ? 9 : 7) * FS}
                           fontFamily="Arial,sans-serif"
                           transform={`rotate(-90,${cx},${cySeg})`}
@@ -163,15 +168,15 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
                 })}
 
                 {/* Click-to-select overlay: kiválasztja az oszlopot kézi
-                    megosztás megadásához (ha nincs automatikus toldás) */}
-                {onSelectColumn && isSelectable && (
+                    megosztáshoz vagy a rendelésből való kihagyáshoz */}
+                {onSelectColumn && (
                   <rect
                     x={sx1} y={colSyTop} width={colPx} height={colSyBot - colSyTop}
                     fill="transparent"
                     className="cursor-pointer hover:fill-blue-500/10 print:hidden"
                     onClick={() => onSelectColumn(col.index)}
                   >
-                    <title>{isManualSplit ? 'Kattints a megosztás módosításához' : 'Kattints a lemez megosztásához'}</title>
+                    <title>{col.excluded ? 'Kattints a rendelésbe való visszavételhez' : isManualSplit ? 'Kattints a megosztás módosításához' : 'Kattints a lemez megosztásához vagy kihagyásához'}</title>
                   </rect>
                 )}
               </g>

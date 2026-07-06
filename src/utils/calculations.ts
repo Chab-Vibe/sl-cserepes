@@ -314,6 +314,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
   const numCols = Math.ceil(width / profile.effectiveWidthM)
   const startX = minX + getStartOffset(plane, profile)
   const manualSplits = plane.manualSplits ?? []
+  const excludedCols = plane.excludedCols ?? []
   const columns: ColumnResult[] = []
 
   for (let i = 0; i < numCols; i++) {
@@ -326,6 +327,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
     if (!ext) continue
 
     const manualSplit = manualSplits.find(s => s.col === i)
+    const excluded = excludedCols.includes(i)
 
     // Ha a sík alja ebben az oszlopban a csurgó (y=0) fölött van (átlósan
     // emelkedő alsó él, pl. kontyolt sarok), a lemez a legalsó pont alatti
@@ -367,7 +369,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
       const totalLenM = finalizeModuleLength(profile, bottomExtra + profile.noseM, modules)
       const segments = buildModuleSegments(profile, modules, bottomExtra, startY, allowOversize, manualSplit?.atM)
       if (segments.length > 0) {
-        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM })
+        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM, excluded })
       }
     } else {
       // Folytonos (modulosztás nélküli) profil: nincs rács, a lemez pontosan
@@ -381,7 +383,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
 
       const segments = buildContinuousSegments(profile, totalLenM, startY, allowOversize, manualSplit?.atM)
       if (segments.length > 0) {
-        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: 0, bottomExtraM: bottomExtra, totalLenM })
+        columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: 0, bottomExtraM: bottomExtra, totalLenM, excluded })
       }
     }
   }
@@ -390,7 +392,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
     planeId: plane.id,
     planeName: plane.name,
     columns,
-    totalSheets: columns.reduce((s, c) => s + c.segments.length, 0),
+    totalSheets: columns.reduce((s, c) => s + (c.excluded ? 0 : c.segments.length), 0),
   }
 }
 
@@ -398,6 +400,7 @@ export function groupByLength(results: PlaneResult[]): OrderGroup[] {
   const map = new Map<number, OrderGroup>()
   for (const r of results) {
     for (const col of r.columns) {
+      if (col.excluded) continue
       for (const seg of col.segments) {
         const key = seg.lengthM
         const existing = map.get(key)

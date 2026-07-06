@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle } from 'lucide-react'
+import { Trash2, Copy, AlignLeft, AlignCenter, AlignRight, AlertTriangle, Ban } from 'lucide-react'
 import type { RoofPlane, PlaneResult, Alignment } from '../../types'
 import { PolygonEditor } from './PolygonEditor'
 import { SheetLayout } from '../visualization/SheetLayout'
@@ -26,6 +26,7 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
 
   const lengthMap = new Map<number, number>()
   for (const col of result.columns) {
+    if (col.excluded) continue
     for (const seg of col.segments) {
       lengthMap.set(seg.lengthM, (lengthMap.get(seg.lengthM) ?? 0) + 1)
     }
@@ -33,8 +34,9 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
   const lengthEntries = [...lengthMap.entries()].sort((a, b) => a[0] - b[0])
   const w = polyWidth(plane.points)
   const h = polyHeight(plane.points)
-  const splitCount = result.columns.filter(c => c.isSplit).length
-  const oversizeCount = result.columns.filter(c => c.segments.some(s => s.lengthM > profile.maxSingleLengthM)).length
+  const splitCount = result.columns.filter(c => !c.excluded && c.isSplit).length
+  const oversizeCount = result.columns.filter(c => !c.excluded && c.segments.some(s => s.lengthM > profile.maxSingleLengthM)).length
+  const excludedCount = result.columns.filter(c => c.excluded).length
 
   const selectColumn = (colIndex: number) => setSelectedCol(prev => prev === colIndex ? null : colIndex)
   const selectedColResult = selectedCol !== null ? result.columns.find(c => c.index === selectedCol) : undefined
@@ -46,6 +48,11 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
   const removeSplit = (colIndex: number) => {
     const others = (plane.manualSplits ?? []).filter(s => s.col !== colIndex)
     onChange({ manualSplits: others })
+  }
+  const toggleExclude = (colIndex: number) => {
+    const cur = plane.excludedCols ?? []
+    const next = cur.includes(colIndex) ? cur.filter(i => i !== colIndex) : [...cur, colIndex]
+    onChange({ excludedCols: next })
   }
 
   return (
@@ -119,8 +126,8 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
         )}
       </div>
 
-      {/* Split / oversize notices */}
-      {(splitCount > 0 || oversizeCount > 0) && (
+      {/* Split / oversize / excluded notices */}
+      {(splitCount > 0 || oversizeCount > 0 || excludedCount > 0) && (
         <div className="mt-3 flex flex-col gap-1.5 print:hidden">
           {splitCount > 0 && (
             <div className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -132,6 +139,12 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
             <div className="flex items-center gap-1.5 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
               <AlertTriangle size={15} className="shrink-0" />
               {oversizeCount} egybefüggő lemez {profile.maxSingleLengthM} m fölött — egyeztess a gyártóval
+            </div>
+          )}
+          {excludedCount > 0 && (
+            <div className="flex items-center gap-1.5 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+              <Ban size={15} className="shrink-0" />
+              {excludedCount} oszlop kihagyva a rendelésből (hulladékból pótolva)
             </div>
           )}
         </div>
@@ -151,33 +164,62 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
       )}
       {valid && (
         <p className="text-slate-300 text-xs mt-1 print:hidden">
-          Kattints egy lemezre a rajzon a kézi megosztásához — megadhatod a kívánt méretet
-          {profile.moduleM !== null ? ', a rendszer a legközelebbi modulhoz igazítja.' : '.'}
+          Kattints egy lemezre a rajzon a kézi megosztásához vagy a rendelésből való kihagyásához
+          {profile.moduleM !== null ? ' (a méretet a rendszer a legközelebbi modulhoz igazítja).' : '.'}
         </p>
       )}
 
-      {/* Manual split editor panel */}
+      {/* Manual split / exclude editor panel */}
       {valid && selectedCol !== null && selectedColResult && (() => {
         const col = selectedColResult
+        const isExcluded = col.excluded
         const isAutoLocked = col.segments.length > 1 && !plane.manualSplits?.some(s => s.col === selectedCol)
         const existing = plane.manualSplits?.find(s => s.col === selectedCol)
 
+        const excludeRow = (
+          <div className={`mt-2 rounded-lg border px-3 py-2 flex items-center justify-between gap-2 text-sm print:hidden ${
+            isExcluded ? 'border-slate-300 bg-slate-100' : 'border-slate-200 bg-slate-50'
+          }`}>
+            <span className="text-slate-600">
+              {selectedCol + 1}. oszlop{isExcluded ? ' — kihagyva a rendelésből (hulladékból pótolva)' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => toggleExclude(selectedCol)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0 ${
+                isExcluded
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-white border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200'
+              }`}
+            >
+              <Ban size={14} />
+              {isExcluded ? 'Visszavétel a rendelésbe' : 'Kihagyás a rendelésből'}
+            </button>
+          </div>
+        )
+
         if (isAutoLocked) {
           return (
-            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
-              <span>Ez az oszlop automatikusan toldva van ({profile.maxSingleLengthM} m fölötti magasság) — kézi megosztás nem szükséges.</span>
-              <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
-            </div>
+            <>
+              {excludeRow}
+              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
+                <span>Ez az oszlop automatikusan toldva van ({profile.maxSingleLengthM} m fölötti magasság) — kézi megosztás nem szükséges.</span>
+                <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
+              </div>
+            </>
           )
         }
 
         const bounds = splitBoundsMm(profile, col)
         if (!bounds) {
           return (
-            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
-              <span>Ez a lemez túl rövid ahhoz, hogy két gyártható darabra osztható legyen.</span>
-              <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
-            </div>
+            <>
+              {excludeRow}
+              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 flex items-center justify-between gap-2 print:hidden">
+                <span>Ez a lemez túl rövid ahhoz, hogy két gyártható darabra osztható legyen.</span>
+                <button type="button" onClick={() => setSelectedCol(null)} className="text-slate-400 hover:text-slate-700 shrink-0">Bezár</button>
+              </div>
+            </>
           )
         }
 
@@ -189,34 +231,37 @@ export function PlaneCard({ plane, result, profile, onChange, onRemove, onDuplic
           : Math.round((bounds.minMm + bounds.maxMm) / 2)
 
         return (
-          <form
-            key={`${selectedCol}-${existing ? defaultTargetMm : 'new'}`}
-            onSubmit={e => {
-              e.preventDefault()
-              const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
-              if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, mm)
-            }}
-            className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-sm print:hidden"
-          >
-            <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
-            <input
-              name="mm" type="number"
-              defaultValue={defaultTargetMm}
-              className="w-24 bg-white border border-blue-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400"
-            />
-            <span className="text-blue-400">mm ({bounds.minMm}–{bounds.maxMm} között)</span>
-            <button type="submit" className="px-2.5 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
-              Alkalmaz
-            </button>
-            {existing && (
-              <button type="button" onClick={() => removeSplit(selectedCol)} className="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-500 hover:text-red-500 transition-colors">
-                Egyesítés
+          <>
+            {excludeRow}
+            <form
+              key={`${selectedCol}-${existing ? defaultTargetMm : 'new'}`}
+              onSubmit={e => {
+                e.preventDefault()
+                const mm = parseFloat(String(new FormData(e.currentTarget).get('mm')))
+                if (!Number.isNaN(mm) && mm > 0) applySplit(selectedCol, mm)
+              }}
+              className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 flex items-center gap-2 flex-wrap text-sm print:hidden"
+            >
+              <span className="text-blue-800 font-medium">{selectedCol + 1}. oszlop — alsó darab hossza:</span>
+              <input
+                name="mm" type="number"
+                defaultValue={defaultTargetMm}
+                className="w-24 bg-white border border-blue-200 rounded px-2 py-1 text-slate-800 outline-none focus:border-blue-400"
+              />
+              <span className="text-blue-400">mm ({bounds.minMm}–{bounds.maxMm} között)</span>
+              <button type="submit" className="px-2.5 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors">
+                Alkalmaz
               </button>
-            )}
-            <button type="button" onClick={() => setSelectedCol(null)} className="ml-auto text-blue-400 hover:text-blue-700">
-              Bezár
-            </button>
-          </form>
+              {existing && (
+                <button type="button" onClick={() => removeSplit(selectedCol)} className="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-500 hover:text-red-500 transition-colors">
+                  Egyesítés
+                </button>
+              )}
+              <button type="button" onClick={() => setSelectedCol(null)} className="ml-auto text-blue-400 hover:text-blue-700">
+                Bezár
+              </button>
+            </form>
+          </>
         )
       })()}
 

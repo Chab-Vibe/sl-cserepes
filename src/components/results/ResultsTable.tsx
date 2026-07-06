@@ -15,6 +15,7 @@ export function ResultsTable({ results, profile }: Props) {
       {results.map(r => {
         const lengthMap = new Map<number, { count: number; modules: number }>()
         for (const col of r.columns) {
+          if (col.excluded) continue
           for (const seg of col.segments) {
             const existing = lengthMap.get(seg.lengthM)
             if (existing) existing.count++

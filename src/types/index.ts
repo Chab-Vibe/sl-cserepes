@@ -16,6 +16,7 @@ export interface RoofPlane {
   eaveOverhangM: number
   alignment: Alignment
   manualSplits?: ManualSplit[]  // kézi megosztások: oszlopindex + kívánt alsó darab hossz
+  excludedCols?: number[]        // oszlopindexek, amelyek lemezét a felhasználó kihagyta a rendelésből (pl. hulladékból pótolható apró darab)
 }
 
 // Egy fizikailag legyártott/rendelhető lemezdarab egy oszlopon belül.
@@ -39,6 +40,7 @@ export interface ColumnResult {
   totalModules: number   // az oszlop teljes (meg nem osztott) modulszáma (0, ha a profilnak nincs modulosztása)
   bottomExtraM: number    // a legalsó darab alsó ráhagyása (csurgó, vagy 0 emelt aljnál)
   totalLenM: number       // az oszlop teljes (meg nem osztott) gyártási hossza
+  excluded: boolean       // a felhasználó kihagyta a rendelésből (a rajzon látszik, de nem számít bele az összesítőbe)
 }
 
 export interface PlaneResult {
