@@ -157,31 +157,35 @@ function buildModuleSegments(profile: SheetProfile, totalModules: number, bottom
     return [{ order: 0, modules: totalModules, lengthM: totalLenM, startM: r3(startYM), endM: r3(startYM + totalLenM) }]
   }
 
-  const segments: SheetSegment[] = []
-  let remaining = totalModules
-  let cursorM = startYM
-  let order = 0
-
+  // Automatikus toldás: a lehető legkevesebb darabra osztjuk, és a modulokat
+  // minél egyenletesebben osztjuk el köztük — nem az elsőt töltjük tele a
+  // max. hosszig egy apró maradék darabbal a végén, hanem pl. 2 db kb.
+  // egyenlő darabot készítünk (átfedéssel).
+  let N = 2
+  let base = 0
+  let extra = 0
   while (true) {
-    const base = order === 0 ? bottomExtraM : profile.overlapM
-    const finishLenM = finalizeModuleLength(profile, base + profile.noseM, remaining)
+    base = Math.floor(totalModules / N)
+    extra = totalModules % N
+    if (base < 2) { N++; continue }
+    const maxCountInAnyPiece = extra > 0 ? base + 1 : base
+    // Óvatos (worst-case) becslés: bármelyik pozícióban lehet a legtöbb
+    // modult tartalmazó darab, ezért a legnagyobb lehetséges alapmérettel
+    // (csurgó, átfedés vagy orr) számolunk.
+    const worstBase = Math.max(bottomExtraM, profile.overlapM, profile.noseM)
+    const worstLenM = worstBase + maxCountInAnyPiece * MODULE
+    if (worstLenM <= profile.maxSingleLengthM + 1e-9) break
+    N++
+  }
 
-    if (finishLenM <= profile.maxSingleLengthM + 1e-9) {
-      segments.push({ order, modules: remaining, lengthM: finishLenM, startM: r3(cursorM), endM: r3(cursorM + finishLenM) })
-      break
-    }
-
-    // Nem fér ki egyben: ezt a darabot a lehető legtöbb teljes modullal
-    // töltjük fel a max. gyártási hosszon belül (orr nélkül, hisz nem itt
-    // végződik), de legalább 2 modult meghagyva a záró darabnak.
-    const maxModulesInCap = Math.floor((profile.maxSingleLengthM - base) / MODULE)
-    const n = Math.max(2, Math.min(remaining - 2, Math.max(2, maxModulesInCap)))
-    const lenM = finalizeModuleLength(profile, base, n)
-    segments.push({ order, modules: n, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
-
-    remaining -= n
+  const counts = Array.from({ length: N }, (_, i) => base + (i < extra ? 1 : 0))
+  const segments: SheetSegment[] = []
+  let cursorM = startYM
+  for (let i = 0; i < N; i++) {
+    const pieceBase = (i === 0 ? bottomExtraM : profile.overlapM) + (i === N - 1 ? profile.noseM : 0)
+    const lenM = finalizeModuleLength(profile, pieceBase, counts[i])
+    segments.push({ order: i, modules: counts[i], lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
     cursorM = cursorM + lenM - profile.overlapM
-    order++
   }
 
   return segments
@@ -214,22 +218,22 @@ function buildContinuousSegments(profile: SheetProfile, totalLenM: number, start
     return [{ order: 0, modules: 0, lengthM: lenM, startM: r3(startYM), endM: r3(startYM + lenM) }]
   }
 
-  // Automatikus toldás: minden darab pontosan a max. gyártási hosszú, az
-  // utolsó a maradékot fedi.
+  // Automatikus toldás: a lehető legkevesebb, egymáshoz közel egyenlő
+  // hosszú darabra osztjuk (nem az elsőt max. hosszra töltve egy apró
+  // maradék darabbal a végén) — pl. 7,4 m 7 m-es max. hossznál 2×3,8 m
+  // lesz, nem 7 m + 0,6 m.
+  let N = 2
+  while ((totalLenM + (N - 1) * OVERLAP) / N > MAX + 1e-9) N++
+  const pieceLenM = r3((totalLenM + (N - 1) * OVERLAP) / N)
+
   const segments: SheetSegment[] = []
   const endTarget = startYM + totalLenM
   let cursorM = startYM
-  let order = 0
-  while (true) {
-    const remainingLen = endTarget - cursorM
-    if (remainingLen <= MAX + 1e-9) {
-      const lenM = r3(remainingLen)
-      segments.push({ order, modules: 0, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
-      break
-    }
-    segments.push({ order, modules: 0, lengthM: MAX, startM: r3(cursorM), endM: r3(cursorM + MAX) })
-    cursorM = cursorM + MAX - OVERLAP
-    order++
+  for (let i = 0; i < N; i++) {
+    const isLast = i === N - 1
+    const lenM = isLast ? r3(endTarget - cursorM) : pieceLenM
+    segments.push({ order: i, modules: 0, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
+    cursorM = cursorM + lenM - OVERLAP
   }
   return segments
 }
