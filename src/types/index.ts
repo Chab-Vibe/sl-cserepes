@@ -2,7 +2,7 @@ export type Alignment = 'left' | 'center' | 'right'
 
 // A választható lemeztípus azonosítója — a konkrét méreteket/szabályokat a
 // SHEET_PROFILES (calculations.ts) tárolja ehhez az azonosítóhoz.
-export type SheetTypeId = 'cserepeslemez' | 't35'
+export type SheetTypeId = 'cserepeslemez' | 't35' | 't14' | 't8' | 't18'
 
 export interface ManualSplit {
   col: number    // oszlopindex

@@ -7,6 +7,9 @@ import type { SheetTypeId } from '../types'
 const TYPE_OPTS: { value: SheetTypeId; label: string }[] = [
   { value: 'cserepeslemez', label: 'Cserepeslemez' },
   { value: 't35', label: 'T-35 saját gyártás' },
+  { value: 't14', label: 'T-14 saját gyártás' },
+  { value: 't8', label: 'T-8 saját gyártás' },
+  { value: 't18', label: 'T-18 saját gyártás' },
 ]
 
 export function Header() {
