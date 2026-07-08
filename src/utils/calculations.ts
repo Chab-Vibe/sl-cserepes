@@ -33,8 +33,8 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     group: 'cserepeslemez',
     moduleM: 0.350,
     noseM: 0.070,
-    totalWidthM: 1.18,
-    effectiveWidthM: 1.10,
+    totalWidthM: 1.1,
+    effectiveWidthM: 1.0,
     // 6 méter fölött a lemez csak felhasználói jóváhagyással gyártható egyben;
     // egyébként a rendszer toldja, MODULE-határon vágva, fix átfedéssel.
     maxSingleLengthM: 6.0,
