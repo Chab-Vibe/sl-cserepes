@@ -9,6 +9,25 @@ export interface ManualSplit {
   atM: number    // a kívánt alsó darab hossza méterben (a profil dönti el, hogyan illeszkedik rá: modulhatárra kerekítve vagy folytonosan)
 }
 
+// Egy tetőélhez (points[i] → points[(i+1) % n]) rendelt, szabadon definiált
+// kellék (pl. sarokelem, szegély, ereszcsatorna) — a felhasználó adja meg a
+// nevét és a gyártott egységhosszát, a darabszámot a rendszer számolja.
+export interface EdgeAccessory {
+  edgeIndex: number
+  name: string
+  unitLengthM: number
+}
+
+export interface EdgeAccessoryResult extends EdgeAccessory {
+  edgeLengthM: number
+  count: number
+}
+
+export interface AccessoryGroup {
+  name: string
+  totalCount: number
+}
+
 export interface RoofPlane {
   id: string
   name: string
@@ -17,6 +36,11 @@ export interface RoofPlane {
   alignment: Alignment
   manualSplits?: ManualSplit[]  // kézi megosztások: oszlopindex + kívánt alsó darab hossz
   excludedCols?: number[]        // oszlopindexek, amelyek lemezét a felhasználó kihagyta a rendelésből (pl. hulladékból pótolható apró darab)
+  edgeAccessories?: EdgeAccessory[]  // élenkénti kellékek
+  // Tri-state felülbírálás a profil alapértékéhez képest: undefined = profil
+  // alapértékét örökli, 0 = kifejezetten kikapcsolva. Mindig ?? -vel olvasandó.
+  roundingOverrideMm?: number
+  alternatingJointOverrideMm?: number
 }
 
 // Egy fizikailag legyártott/rendelhető lemezdarab egy oszlopon belül.
@@ -54,4 +78,10 @@ export interface OrderGroup {
   lengthM: number
   totalSheets: number
   planeNames: string[]
+}
+
+// Ügyfél/ajánlat adatok (ár/költség nélkül — csak mennyiségi ajánlat).
+export interface CustomerInfo {
+  name: string
+  description: string
 }

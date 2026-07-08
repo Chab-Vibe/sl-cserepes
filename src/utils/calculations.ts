@@ -1,25 +1,40 @@
-import type { RoofPlane, ColumnResult, PlaneResult, OrderGroup, SheetSegment, SheetTypeId } from '../types'
+import type { RoofPlane, ColumnResult, PlaneResult, OrderGroup, SheetSegment, SheetTypeId, EdgeAccessoryResult, AccessoryGroup } from '../types'
+
+export type SheetGroupId = 'trapez' | 'cserepeslemez' | 'modulos_cserepeslemez' | 'roll'
+
+// A csoportok a termékkatalógus UI-hoz — szándékosan független a ténylegesen
+// létező profiloktól, hogy később bővíthető legyen (üres csoportot a UI nem jelenít meg).
+export const SHEET_GROUPS: { id: SheetGroupId; label: string }[] = [
+  { id: 'trapez', label: 'Trapézlemezek és panelek' },
+  { id: 'cserepeslemez', label: 'Cserepeslemezek' },
+  { id: 'modulos_cserepeslemez', label: 'Modulos cserepeslemez' },
+  { id: 'roll', label: 'Tekercses anyagok' },
+]
 
 export interface SheetProfile {
   id: SheetTypeId
   label: string
+  group: SheetGroupId
   moduleM: number | null      // null = folytonos rendszer, nincs modulosztás
-  noseM: number
+  noseM: number               // a lemez felső (gerinc felőli) fedése — csak a legfelső darab tetejéhez adódik; a csurgó felőli végen a felhasználó eaveOverhangM-je adja a ráhagyást, nincs külön fix "lábméret"
   totalWidthM: number
   effectiveWidthM: number
   maxSingleLengthM: number
   overlapM: number
   minLengthM: number | null   // null = nincs gyártási minimum
+  roundingMm: number          // vágási hossz kerekítési lépésköze (mm), 0 = nincs kerekítés
+  alternatingJointDefaultMm: number  // toldott lemezek varrat-vonalának alap váltakozó eltolása (mm), 0 = kikapcsolva
 }
 
 export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
   cserepeslemez: {
     id: 'cserepeslemez',
     label: 'Cserepeslemez',
+    group: 'cserepeslemez',
     moduleM: 0.350,
-    noseM: 0.050,
-    totalWidthM: 1.1,
-    effectiveWidthM: 1.0,
+    noseM: 0.070,
+    totalWidthM: 1.18,
+    effectiveWidthM: 1.10,
     // 6 méter fölött a lemez csak felhasználói jóváhagyással gyártható egyben;
     // egyébként a rendszer toldja, MODULE-határon vágva, fix átfedéssel.
     maxSingleLengthM: 6.0,
@@ -27,10 +42,14 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     // A legkisebb gyártható lemezhossz — sem az alap kiosztás, sem a kézi/
     // automatikus megosztás nem hozhat létre ennél rövidebb darabot.
     minLengthM: 0.82,
+    // Már modulrácshoz kötött rendszer — alapból ne módosítsuk a viselkedését.
+    roundingMm: 0,
+    alternatingJointDefaultMm: 0,
   },
   t35: {
     id: 't35',
     label: 'T-35 saját gyártás',
+    group: 'trapez',
     moduleM: null,
     noseM: 0,
     totalWidthM: 1.05,
@@ -38,10 +57,13 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     maxSingleLengthM: 7.0,
     overlapM: 0.20,
     minLengthM: null,
+    roundingMm: 10,
+    alternatingJointDefaultMm: 100,
   },
   t14: {
     id: 't14',
     label: 'T-14 saját gyártás',
+    group: 'trapez',
     moduleM: null,
     noseM: 0,
     totalWidthM: 1.1,
@@ -49,10 +71,13 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     maxSingleLengthM: 7.0,
     overlapM: 0.20,
     minLengthM: null,
+    roundingMm: 10,
+    alternatingJointDefaultMm: 100,
   },
   t8: {
     id: 't8',
     label: 'T-8 saját gyártás',
+    group: 'trapez',
     moduleM: null,
     noseM: 0,
     totalWidthM: 1.18,
@@ -60,10 +85,13 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     maxSingleLengthM: 5.0,
     overlapM: 0.20,
     minLengthM: null,
+    roundingMm: 10,
+    alternatingJointDefaultMm: 100,
   },
   t18: {
     id: 't18',
     label: 'T-18 saját gyártás',
+    group: 'trapez',
     moduleM: null,
     noseM: 0,
     totalWidthM: 1.15,
@@ -71,6 +99,8 @@ export const SHEET_PROFILES: Record<SheetTypeId, SheetProfile> = {
     maxSingleLengthM: 7.0,
     overlapM: 0.20,
     minLengthM: null,
+    roundingMm: 10,
+    alternatingJointDefaultMm: 100,
   },
 }
 
@@ -127,6 +157,13 @@ function columnExtent(points: [number, number][], colX1: number, colX2: number):
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000
 
+// Felfelé kerekít a legközelebbi stepM többszörösére (a gyártási vágási
+// tűréshez) — 0 lépésköznél nincs kerekítés, csak mm-re kerekítünk.
+function ceilToStepM(lenM: number, stepM: number): number {
+  if (stepM <= 1e-9) return r3(lenM)
+  return r3(Math.ceil(lenM / stepM - 1e-9) * stepM)
+}
+
 // ── Modul-alapú (pl. cserepeslemez) segédfüggvények ──────────────────────
 
 // Nettó magassághoz szükséges egész modulszám (felfelé lépcsőzve).
@@ -154,20 +191,31 @@ function moduleFloor(moduleM: number, relH: number): number {
 // profil gyártási minimuma alá esne, a darabot pontosan a minimumra
 // NYÚJTJUK (nem lépünk egy egész modult tovább). 3 modultól fölfelé a
 // nyers hossz mindig eléri a minimumot, így ott sosem kell nyújtani.
+// Ez a "döntési" hossz — a kerekítési tűrés (ceilToStepM) ezután, a
+// szegmens véglegesítésekor alkalmazandó, nem itt.
 function finalizeModuleLength(profile: SheetProfile, otherLenM: number, modules: number): number {
   const naturalM = r3(otherLenM + modules * profile.moduleM!)
   if (profile.minLengthM !== null && modules === 2 && naturalM < profile.minLengthM - 1e-9) return profile.minLengthM
   return naturalM
 }
 
+interface SegmentBuildOpts {
+  splitAtM?: number
+  roundingM: number
+  alternatingM: number
+  colParityOdd: boolean
+}
+
 // Adott modulszámú lemezoszlopból legyártható szegmenseket épít fel.
-// bottomExtraM: a legalsó darab alsó ráhagyása (csurgó az eresznél, 0 emelt aljnál),
+// bottomExtraM: a legalsó darab alsó ráhagyása (csurgó az eresznél, 0 emelt aljnál) —
+// ez adja a lemez alsó "orrát" is, nincs ettől külön fix lábméret.
 // startYM: a lemez aljának Y pozíciója a síkon (0 az eresznél, modulrács-vonal emelt aljnál).
-// splitAtM: felhasználó által kért kézi megosztás (az alsó darab kívánt hossza
-// méterben) — ha a lemez egyébként egyben elférne, mégis a legközelebbi
+// opts.splitAtM: felhasználó által kért kézi megosztás (az alsó darab kívánt
+// hossza méterben) — ha a lemez egyébként egyben elférne, mégis a legközelebbi
 // érvényes modulhatárnál két darabra vágja, OVERLAP_M átfedéssel.
-function buildModuleSegments(profile: SheetProfile, totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, splitAtM?: number): SheetSegment[] {
+function buildModuleSegments(profile: SheetProfile, totalModules: number, bottomExtraM: number, startYM: number, allowOversize: boolean, opts: SegmentBuildOpts): SheetSegment[] {
   const MODULE = profile.moduleM!
+  const { splitAtM, roundingM, alternatingM, colParityOdd } = opts
   if (totalModules <= 0) return []
 
   const totalLenM = finalizeModuleLength(profile, bottomExtraM + profile.noseM, totalModules)
@@ -175,12 +223,12 @@ function buildModuleSegments(profile: SheetProfile, totalModules: number, bottom
 
   if (!needsAutoSplit && splitAtM !== undefined && totalModules >= 4) {
     const kMax = totalModules - 2
-    const twoModuleLenM = finalizeModuleLength(profile, bottomExtraM, 2)
+    const twoModuleLenM = finalizeModuleLength(profile, bottomExtraM + profile.noseM, 2)
     const k = splitAtM <= twoModuleLenM + 1e-9
       ? Math.min(2, kMax)
-      : Math.min(kMax, Math.max(3, Math.ceil((splitAtM - bottomExtraM) / MODULE - 1e-9)))
-    const lenA = finalizeModuleLength(profile, bottomExtraM, k)
-    const lenB = finalizeModuleLength(profile, profile.overlapM + profile.noseM, totalModules - k)
+      : Math.min(kMax, Math.max(3, Math.ceil((splitAtM - bottomExtraM - profile.noseM) / MODULE - 1e-9)))
+    const lenA = ceilToStepM(finalizeModuleLength(profile, bottomExtraM + profile.noseM, k), roundingM)
+    const lenB = ceilToStepM(finalizeModuleLength(profile, profile.overlapM + profile.noseM, totalModules - k), roundingM)
     return [
       { order: 0, modules: k, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
       { order: 1, modules: totalModules - k, lengthM: lenB, startM: r3(startYM + lenA - profile.overlapM), endM: r3(startYM + lenA - profile.overlapM + lenB) },
@@ -188,7 +236,8 @@ function buildModuleSegments(profile: SheetProfile, totalModules: number, bottom
   }
 
   if (!needsAutoSplit) {
-    return [{ order: 0, modules: totalModules, lengthM: totalLenM, startM: r3(startYM), endM: r3(startYM + totalLenM) }]
+    const lenM = ceilToStepM(totalLenM, roundingM)
+    return [{ order: 0, modules: totalModules, lengthM: lenM, startM: r3(startYM), endM: r3(startYM + lenM) }]
   }
 
   // Automatikus toldás: a lehető legkevesebb darabra osztjuk, és a modulokat
@@ -206,18 +255,37 @@ function buildModuleSegments(profile: SheetProfile, totalModules: number, bottom
     // Óvatos (worst-case) becslés: bármelyik pozícióban lehet a legtöbb
     // modult tartalmazó darab, ezért a legnagyobb lehetséges alapmérettel
     // (csurgó, átfedés vagy orr) számolunk.
-    const worstBase = Math.max(bottomExtraM, profile.overlapM, profile.noseM)
+    const worstBase = Math.max(bottomExtraM, profile.overlapM) + profile.noseM
     const worstLenM = worstBase + maxCountInAnyPiece * MODULE
     if (worstLenM <= profile.maxSingleLengthM + 1e-9) break
     N++
   }
 
-  const counts = Array.from({ length: N }, (_, i) => base + (i < extra ? 1 : 0))
+  let counts = Array.from({ length: N }, (_, i) => base + (i < extra ? 1 : 0))
+
+  // Váltakozó varrat-eltolás: csak a leggyakoribb N=2 esetben, páratlan
+  // oszlopoknál toljuk el a vágáspontot néhány modullal, hogy a toldási
+  // varratok ne fussanak egy vonalban a teljes tetőn. Ha az eltolt darabok
+  // bármelyike sértené a modul-minimumot vagy a max. gyártási hosszt, a
+  // klippelés visszaesik az eredeti (nem eltolt) felosztásra.
+  if (N === 2 && alternatingM > 1e-9 && colParityOdd) {
+    const shiftMod = Math.max(1, Math.round(alternatingM / MODULE))
+    const cand0 = counts[0] + shiftMod
+    const cand1 = totalModules - cand0
+    if (cand0 >= 2 && cand1 >= 2) {
+      const len0 = finalizeModuleLength(profile, bottomExtraM + profile.noseM, cand0)
+      const len1 = finalizeModuleLength(profile, profile.overlapM + profile.noseM, cand1)
+      if (len0 <= profile.maxSingleLengthM + 1e-9 && len1 <= profile.maxSingleLengthM + 1e-9) {
+        counts = [cand0, cand1]
+      }
+    }
+  }
+
   const segments: SheetSegment[] = []
   let cursorM = startYM
   for (let i = 0; i < N; i++) {
-    const pieceBase = (i === 0 ? bottomExtraM : profile.overlapM) + (i === N - 1 ? profile.noseM : 0)
-    const lenM = finalizeModuleLength(profile, pieceBase, counts[i])
+    const pieceBase = (i === 0 ? bottomExtraM : profile.overlapM) + profile.noseM
+    const lenM = ceilToStepM(finalizeModuleLength(profile, pieceBase, counts[i]), roundingM)
     segments.push({ order: i, modules: counts[i], lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
     cursorM = cursorM + lenM - profile.overlapM
   }
@@ -229,7 +297,8 @@ function buildModuleSegments(profile: SheetProfile, totalModules: number, bottom
 
 // Nincs rács: a lemez pontosan a szükséges hosszra készül, tetszőleges
 // (mm-pontos) hosszban — csak a gyártási max. hossz és az átfedés korlátoz.
-function buildContinuousSegments(profile: SheetProfile, totalLenM: number, startYM: number, allowOversize: boolean, splitAtM?: number): SheetSegment[] {
+function buildContinuousSegments(profile: SheetProfile, totalLenM: number, startYM: number, allowOversize: boolean, opts: SegmentBuildOpts): SheetSegment[] {
+  const { splitAtM, roundingM, alternatingM, colParityOdd } = opts
   if (totalLenM <= 1e-9) return []
   const MAX = profile.maxSingleLengthM
   const OVERLAP = profile.overlapM
@@ -238,8 +307,8 @@ function buildContinuousSegments(profile: SheetProfile, totalLenM: number, start
   if (!needsAutoSplit && splitAtM !== undefined) {
     const bounds = continuousSplitBoundsM(profile, totalLenM)
     if (bounds) {
-      const lenA = r3(Math.min(bounds.maxM, Math.max(bounds.minM, splitAtM)))
-      const lenB = r3(totalLenM - lenA + OVERLAP)
+      const lenA = ceilToStepM(Math.min(bounds.maxM, Math.max(bounds.minM, splitAtM)), roundingM)
+      const lenB = ceilToStepM(totalLenM - lenA + OVERLAP, roundingM)
       return [
         { order: 0, modules: 0, lengthM: lenA, startM: r3(startYM), endM: r3(startYM + lenA) },
         { order: 1, modules: 0, lengthM: lenB, startM: r3(startYM + lenA - OVERLAP), endM: r3(startYM + lenA - OVERLAP + lenB) },
@@ -248,7 +317,7 @@ function buildContinuousSegments(profile: SheetProfile, totalLenM: number, start
   }
 
   if (!needsAutoSplit) {
-    const lenM = r3(totalLenM)
+    const lenM = ceilToStepM(totalLenM, roundingM)
     return [{ order: 0, modules: 0, lengthM: lenM, startM: r3(startYM), endM: r3(startYM + lenM) }]
   }
 
@@ -260,12 +329,27 @@ function buildContinuousSegments(profile: SheetProfile, totalLenM: number, start
   while ((totalLenM + (N - 1) * OVERLAP) / N > MAX + 1e-9) N++
   const pieceLenM = r3((totalLenM + (N - 1) * OVERLAP) / N)
 
+  // Váltakozó varrat-eltolás: csak N=2 esetben, páratlan oszlopoknál.
+  let lenAOverride: number | null = null
+  if (N === 2 && alternatingM > 1e-9 && colParityOdd) {
+    const candA = pieceLenM + alternatingM
+    const candB = totalLenM + OVERLAP - candA
+    const bounds = continuousSplitBoundsM(profile, totalLenM)
+    if (bounds && candA >= bounds.minM && candA <= bounds.maxM && candA <= MAX + 1e-9 && candB <= MAX + 1e-9 && candB >= CONTINUOUS_MIN_PIECE_M) {
+      lenAOverride = candA
+    }
+  }
+
   const segments: SheetSegment[] = []
   const endTarget = startYM + totalLenM
   let cursorM = startYM
   for (let i = 0; i < N; i++) {
     const isLast = i === N - 1
-    const lenM = isLast ? r3(endTarget - cursorM) : pieceLenM
+    let lenM: number
+    if (i === 0 && lenAOverride !== null) lenM = lenAOverride
+    else if (isLast) lenM = r3(endTarget - cursorM)
+    else lenM = pieceLenM
+    lenM = ceilToStepM(lenM, roundingM)
     segments.push({ order: i, modules: 0, lengthM: lenM, startM: r3(cursorM), endM: r3(cursorM + lenM) })
     cursorM = cursorM + lenM - OVERLAP
   }
@@ -303,8 +387,8 @@ export function splitBoundsMm(profile: SheetProfile, col: Pick<ColumnResult, 'to
   if (col.totalModules < 4) return null
   const kMax = col.totalModules - 2
   return {
-    minMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM, 2) * 1000),
-    maxMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM, kMax) * 1000),
+    minMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM + profile.noseM, 2) * 1000),
+    maxMm: Math.round(finalizeModuleLength(profile, col.bottomExtraM + profile.noseM, kMax) * 1000),
   }
 }
 
@@ -329,6 +413,46 @@ export function polyHeight(points: [number, number][]): number {
   return Math.max(...points.map(p => p[1]))
 }
 
+// Minden sokszögél (points[i] → points[(i+1) % n]) hossza méterben — ezt
+// használja a rajz élcímkéje ÉS az élenkénti kellékszámítás is, hogy a kettő
+// sose térjen el egymástól.
+export function polyEdges(points: [number, number][]): { index: number; lengthM: number }[] {
+  const n = points.length
+  if (n < 2) return []
+  return Array.from({ length: n }, (_, i) => {
+    const [x1, y1] = points[i]
+    const [x2, y2] = points[(i + 1) % n]
+    return { index: i, lengthM: Math.hypot(x2 - x1, y2 - y1) }
+  })
+}
+
+// Egy sík élenkénti kellékeinek (sarokelem, szegély stb.) számított
+// darabszáma — a kellék egységhosszából és az él tényleges hosszából.
+export function calculateEdgeAccessories(plane: RoofPlane): EdgeAccessoryResult[] {
+  const edges = polyEdges(plane.points)
+  return (plane.edgeAccessories ?? []).map(acc => {
+    const edgeLengthM = edges.find(e => e.index === acc.edgeIndex)?.lengthM ?? 0
+    const count = acc.unitLengthM > 1e-9 ? Math.ceil(edgeLengthM / acc.unitLengthM - 1e-9) : 0
+    return { ...acc, edgeLengthM, count }
+  })
+}
+
+// Projekt-szintű kellék-összesítő: névre (kisbetűsítve, trim-elve)
+// csoportosítva összeadja az összes sík összes kellékének darabszámát.
+export function groupAccessories(planes: RoofPlane[]): AccessoryGroup[] {
+  const map = new Map<string, AccessoryGroup>()
+  for (const plane of planes) {
+    for (const r of calculateEdgeAccessories(plane)) {
+      const key = r.name.trim().toLowerCase()
+      if (!key) continue
+      const existing = map.get(key)
+      if (existing) existing.totalCount += r.count
+      else map.set(key, { name: r.name.trim(), totalCount: r.count })
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
 export function getStartOffset(plane: RoofPlane, profile: SheetProfile): number {
   const width = polyWidth(plane.points)
   if (width <= 0) return 0
@@ -348,6 +472,8 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
   const startX = minX + getStartOffset(plane, profile)
   const manualSplits = plane.manualSplits ?? []
   const excludedCols = plane.excludedCols ?? []
+  const roundingM = (plane.roundingOverrideMm ?? profile.roundingMm) / 1000
+  const alternatingM = (plane.alternatingJointOverrideMm ?? profile.alternatingJointDefaultMm) / 1000
   const columns: ColumnResult[] = []
 
   for (let i = 0; i < numCols; i++) {
@@ -370,6 +496,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
     // a saját (helyi) ereszvonalát, ott kapja meg a fizikai túlnyúlást, a
     // lemez pedig a TÉNYLEGES legalsó pontból indul, nem egy rögzített 0-ból.
     const raised = ext.minY > plane.eaveOverhangM + 1e-6
+    const segOpts: SegmentBuildOpts = { splitAtM: manualSplit?.atM, roundingM, alternatingM, colParityOdd: i % 2 === 1 }
 
     if (profile.moduleM !== null) {
       const MODULE = profile.moduleM
@@ -400,7 +527,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
       }
 
       const totalLenM = finalizeModuleLength(profile, bottomExtra + profile.noseM, modules)
-      const segments = buildModuleSegments(profile, modules, bottomExtra, startY, allowOversize, manualSplit?.atM)
+      const segments = buildModuleSegments(profile, modules, bottomExtra, startY, allowOversize, segOpts)
       if (segments.length > 0) {
         columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM, excluded })
       }
@@ -414,7 +541,7 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
       if (coverageM <= 1e-9) continue
       const totalLenM = r3(coverageM + bottomExtra)
 
-      const segments = buildContinuousSegments(profile, totalLenM, startY, allowOversize, manualSplit?.atM)
+      const segments = buildContinuousSegments(profile, totalLenM, startY, allowOversize, segOpts)
       if (segments.length > 0) {
         columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: 0, bottomExtraM: bottomExtra, totalLenM, excluded })
       }

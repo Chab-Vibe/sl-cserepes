@@ -1,12 +1,14 @@
-import type { PlaneResult, OrderGroup } from '../../types'
+import type { PlaneResult, OrderGroup, CustomerInfo, AccessoryGroup } from '../../types'
 import { groupByLength, totalSheets, groupMaterialAreaM2, totalMaterialAreaM2, totalCoverageAreaM2, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   results: PlaneResult[]
   profile: SheetProfile
+  customerInfo?: CustomerInfo
+  accessoryGroups?: AccessoryGroup[]
 }
 
-export function PrintReport({ results, profile }: Props) {
+export function PrintReport({ results, profile, customerInfo, accessoryGroups = [] }: Props) {
   if (results.length === 0) return null
 
   // Összesített rendelési tábla (minden sík együtt)
@@ -15,8 +17,24 @@ export function PrintReport({ results, profile }: Props) {
   const totalArea = totalMaterialAreaM2(groups, profile)
   const coverageArea = totalCoverageAreaM2(groups, profile)
 
+  const showName = customerInfo && customerInfo.name.trim() !== ''
+  const showDescription = customerInfo && customerInfo.description.trim() !== ''
+  const showCustomerBlock = showName || showDescription
+
   return (
     <div className="hidden print:block">
+
+      {/* ── Ügyfél adatok ── */}
+      {showCustomerBlock && customerInfo && (
+        <div className="mb-6 text-xs">
+          {showName && (
+            <p className="text-gray-900 font-semibold text-sm">{customerInfo.name}</p>
+          )}
+          {showDescription && (
+            <p className="text-gray-600 whitespace-pre-wrap mt-1">{customerInfo.description}</p>
+          )}
+        </div>
+      )}
 
       {/* ── 1. oldal: összesített rendelési táblázat ── */}
       <div className="mb-6">
@@ -65,6 +83,31 @@ export function PrintReport({ results, profile }: Props) {
           A terület a lemez teljes szélességével ({profile.totalWidthM} m) számolt anyagszükséglet. Tetőfelület szükséglet (hasznos {profile.effectiveWidthM * 1000} mm szélességgel): <strong>{coverageArea.toFixed(2)} m²</strong>
         </p>
       </div>
+
+      {/* ── Élenkénti kellékek összesítője ── */}
+      {accessoryGroups.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-base font-bold text-gray-900 mb-3 border-b border-gray-400 pb-1">
+            Élenkénti kellékek
+          </h2>
+          <table className="w-full text-xs border-collapse border border-slate-400">
+            <thead>
+              <tr className="bg-slate-100 text-gray-700">
+                <th className="border border-slate-400 px-2 py-1 text-left font-semibold">Kellék</th>
+                <th className="border border-slate-400 px-2 py-1 text-right font-semibold">Darabszám</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accessoryGroups.map((g, i) => (
+                <tr key={g.name} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="border border-slate-300 px-2 py-1 text-gray-900">{g.name}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-right text-gray-900 font-bold">{g.totalCount} db</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   )

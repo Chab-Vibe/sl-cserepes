@@ -1,5 +1,5 @@
 import type { RoofPlane, PlaneResult, SheetSegment } from '../../types'
-import { polyMinX, polyMaxX, polyHeight, getStartOffset, type SheetProfile } from '../../utils/calculations'
+import { polyMinX, polyMaxX, polyHeight, polyEdges, getStartOffset, type SheetProfile } from '../../utils/calculations'
 
 interface Props {
   plane: RoofPlane
@@ -7,17 +7,40 @@ interface Props {
   profile: SheetProfile
   onSelectColumn?: (colIndex: number) => void
   selectedCol?: number | null
+  onSelectEdge?: (edgeIndex: number) => void
+  selectedEdge?: number | null
   // Kozmetikai (betűméret/jelölésméret) szorzó — a geometria (SVG_W/H, PAD,
   // lépték) mindig ugyanaz marad, hogy a nyomtatott kép változatlan legyen;
   // csak a képernyős nézet kaphat nagyobb feliratokat ezzel a prop-pal.
   fontScale?: number
 }
 
-export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCol = null, fontScale = 1 }: Props) {
-  if (plane.points.length < 3 || result.columns.length === 0) return null
+export interface SheetLayoutView {
+  SVG_W: number
+  SVG_H: number
+  PAD: { top: number; right: number; bottom: number; left: number }
+  minX: number
+  maxX: number
+  maxY: number
+  startX: number
+  totalSheetW: number
+  overhangLeft: number
+  overhangRight: number
+  viewLeft: number
+  viewRight: number
+  viewW: number
+  viewH: number
+  scale: number
+  ox: number
+  oy: number
+  usedW: number
+  usedH: number
+}
 
-  const FS = fontScale
-
+// Kiemelt nézet/lépték-számítás — ugyanezt használja a SheetLayout maga (a
+// kirajzoláshoz) és a RulerCanvas-alapú LayoutWorkspace is (a vonalzó
+// pixelsPerMeter/originScreen paramétereihez), hogy a kettő sose térjen el.
+export function computeSheetLayoutView(plane: RoofPlane, result: PlaneResult, profile: SheetProfile): SheetLayoutView {
   const minX = polyMinX(plane.points)
   const maxX = polyMaxX(plane.points) || 1
   const maxY = polyHeight(plane.points) || 1
@@ -26,7 +49,6 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
   const totalSheetW = numCols * profile.effectiveWidthM
   const overhangLeft  = Math.max(0, minX - startX)
   const overhangRight = Math.max(0, startX + totalSheetW - maxX)
-  const manualSplits = plane.manualSplits ?? []
 
   // Drawing canvas — fix méret, a nyomtatott kép ettől nem függ a fontScale-től.
   const SVG_W = 700
@@ -50,6 +72,18 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
   const ox = PAD.left  + (DW - usedW) / 2
   const oy = PAD.top   + (DH - usedH) / 2
 
+  return { SVG_W, SVG_H, PAD, minX, maxX, maxY, startX, totalSheetW, overhangLeft, overhangRight, viewLeft, viewRight, viewW, viewH, scale, ox, oy, usedW, usedH }
+}
+
+export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCol = null, onSelectEdge, selectedEdge = null, fontScale = 1 }: Props) {
+  if (plane.points.length < 3 || result.columns.length === 0) return null
+
+  const FS = fontScale
+
+  const view = computeSheetLayoutView(plane, result, profile)
+  const { SVG_W, SVG_H, PAD, minX, maxX, maxY, startX, totalSheetW, overhangLeft, overhangRight, viewLeft, viewRight, scale, ox, oy, usedH } = view
+  const manualSplits = plane.manualSplits ?? []
+
   // World coords → SVG (y flipped; viewLeft offset)
   function toSvg(wx: number, wy: number): [number, number] {
     return [ox + (wx - viewLeft) * scale, oy + usedH - wy * scale]
@@ -65,6 +99,7 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
     return { x1, x2: x1 + profile.effectiveWidthM }
   }
 
+  const edges = polyEdges(plane.points)
   const alignLabel = plane.alignment === 'left' ? 'Bal' : plane.alignment === 'right' ? 'Jobb' : 'Közép'
   const totalWidthMm = Math.round((maxX - minX) * 1000)
   const totalSheetWidthMm = Math.round(totalSheetW * 1000)
@@ -201,7 +236,7 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
             )
           })}
 
-          {/* ── Edge length labels ── */}
+          {/* ── Edge length labels + kattintható él-célpontok (kellékekhez) ── */}
           {plane.points.map(([wx1, wy1], i) => {
             const [wx2, wy2] = plane.points[(i + 1) % plane.points.length]
             const [sx1, sy1] = toSvg(wx1, wy1)
@@ -219,11 +254,13 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
             const ly = my + ny * OFF
             const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI
             const rotate = Math.abs(angleDeg) > 90 ? angleDeg + 180 : angleDeg
-            const edgeLenMm = Math.round(Math.hypot(wx2 - wx1, wy2 - wy1) * 1000)
+            const edgeLenMm = Math.round(edges[i].lengthM * 1000)
+            const isSelectedEdge = selectedEdge === i
             return (
               <g key={`el${i}`}>
                 <rect
-                  x={lx - 17 * FS} y={ly - 6 * FS} width={34 * FS} height={11 * FS} rx={2} fill="white" opacity={0.85}
+                  x={lx - 17 * FS} y={ly - 6 * FS} width={34 * FS} height={11 * FS} rx={2}
+                  fill={isSelectedEdge ? '#dbeafe' : 'white'} opacity={0.9}
                   transform={`rotate(${rotate},${lx},${ly})`}
                 />
                 <text
@@ -233,6 +270,16 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
                 >
                   {edgeLenMm}
                 </text>
+                {onSelectEdge && (
+                  <line
+                    x1={sx1} y1={sy1} x2={sx2} y2={sy2}
+                    stroke="transparent" strokeWidth={14}
+                    className="cursor-pointer hover:stroke-blue-500/20 print:hidden"
+                    onClick={() => onSelectEdge(i)}
+                  >
+                    <title>Kattints az élhez tartozó kellékek megadásához</title>
+                  </line>
+                )}
               </g>
             )
           })}
