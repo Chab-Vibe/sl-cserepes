@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import { Trash2, Plus } from 'lucide-react'
 
 interface Props {
@@ -7,10 +7,41 @@ interface Props {
 }
 
 export function PointsTable({ points, onChange }: Props) {
+  const xRefs = useRef<(HTMLInputElement | null)[]>([])
+  const yRefs = useRef<(HTMLInputElement | null)[]>([])
+  const focusNewRowRef = useRef(false)
+
   const addPoint = () => onChange([...points, [0, 0]])
   const deletePoint = (i: number) => onChange(points.filter((_, j) => j !== i))
   const updateX = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [v, p[1]] : p) as [number, number][])
   const updateY = (i: number, v: number) => onChange(points.map((p, j) => j === i ? [p[0], v] : p) as [number, number][])
+
+  // Ha az utolsó sor Y mezőjében Enter-t nyomva új pont jött létre, a
+  // következő render után fókuszáljuk az új sor X mezőjét.
+  useEffect(() => {
+    if (focusNewRowRef.current) {
+      focusNewRowRef.current = false
+      xRefs.current[points.length - 1]?.focus()
+    }
+  }, [points.length])
+
+  const handleXKeyDown = (i: number) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      yRefs.current[i]?.focus()
+    }
+  }
+  const handleYKeyDown = (i: number) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (i + 1 < points.length) {
+        xRefs.current[i + 1]?.focus()
+      } else {
+        focusNewRowRef.current = true
+        addPoint()
+      }
+    }
+  }
 
   return (
     <div className="text-sm">
@@ -23,6 +54,7 @@ export function PointsTable({ points, onChange }: Props) {
           <Fragment key={i}>
             <span className="text-slate-500 text-center font-mono">{i + 1}</span>
             <input
+              ref={el => { xRefs.current[i] = el }}
               type="number" step={10}
               value={wx === 0 ? '' : Math.round(wx * 1000)}
               placeholder="0"
@@ -32,9 +64,11 @@ export function PointsTable({ points, onChange }: Props) {
                 const parsed = parseFloat(raw)
                 if (!Number.isNaN(parsed)) updateX(i, parsed / 1000)
               }}
+              onKeyDown={handleXKeyDown(i)}
               className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-800 outline-none focus:border-blue-400 w-full"
             />
             <input
+              ref={el => { yRefs.current[i] = el }}
               type="number" step={10}
               value={wy === 0 ? '' : Math.round(wy * 1000)}
               placeholder="0"
@@ -44,6 +78,7 @@ export function PointsTable({ points, onChange }: Props) {
                 const parsed = parseFloat(raw)
                 if (!Number.isNaN(parsed)) updateY(i, parsed / 1000)
               }}
+              onKeyDown={handleYKeyDown(i)}
               className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-slate-800 outline-none focus:border-blue-400 w-full"
             />
             <button onClick={() => deletePoint(i)} className="text-slate-300 hover:text-red-500 transition-colors flex justify-center">
