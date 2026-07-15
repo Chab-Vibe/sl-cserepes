@@ -290,8 +290,9 @@ export function SheetLayout({ plane, result, profile, onSelectColumn, selectedCo
             return <circle key={i} cx={sx} cy={sy} r={4} fill="#000" />
           })}
 
-          {/* ── Eave overhang line ── */}
-          {plane.eaveOverhangM > 0 && (() => {
+          {/* ── Eave overhang line — csak modulrácshoz kötött (pl. cserepeslemez)
+              profiloknál értelmezett, trapézlemeznél nem használt ── */}
+          {profile.moduleM !== null && plane.eaveOverhangM > 0 && (() => {
             const [x0, ey] = toSvg(viewLeft, plane.eaveOverhangM)
             const [x1] = toSvg(viewRight, plane.eaveOverhangM)
             return <line x1={x0} y1={ey} x2={x1} y2={ey}

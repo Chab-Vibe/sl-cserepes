@@ -532,11 +532,12 @@ export function calculatePlane(plane: RoofPlane, profile: SheetProfile, allowOve
         columns.push({ index: i, heightM: ext.maxY, segments, isSplit: segments.length > 1, totalModules: modules, bottomExtraM: bottomExtra, totalLenM, excluded })
       }
     } else {
-      // Folytonos (modulosztás nélküli) profil: nincs rács, a lemez pontosan
-      // a szükséges hosszra készül; csurgó csak azoknál az oszlopoknál adódik
-      // hozzá, amelyek ténylegesen elérik a (helyi) ereszvonalukat.
+      // Folytonos (modulosztás nélküli, pl. trapézlemez) profil: nincs rács,
+      // a lemez pontosan a szükséges hosszra készül — a csurgó (eave
+      // overhang) fogalma itt nem értelmezett, a trapézlemez a tényleges
+      // fedendő magasságra készül, ráhagyás nélkül.
       const startY = ext.minY
-      const bottomExtra = raised ? 0 : plane.eaveOverhangM
+      const bottomExtra = 0
       const coverageM = ext.maxY - startY
       if (coverageM <= 1e-9) continue
       const totalLenM = r3(coverageM + bottomExtra)

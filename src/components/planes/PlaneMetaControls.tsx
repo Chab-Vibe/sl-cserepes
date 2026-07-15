@@ -34,16 +34,18 @@ export function PlaneMetaControls({ plane, profile, onChange }: Props) {
         />
       </label>
 
-      <label className="block">
-        <span className={labelClass}>Csurgó (mm)</span>
-        <input
-          type="number" min={0} step={10}
-          value={plane.eaveOverhangM ? Math.round(plane.eaveOverhangM * 1000) : ''}
-          onChange={e => onChange({ eaveOverhangM: (parseFloat(e.target.value) || 0) / 1000 })}
-          className={inputClass}
-          placeholder="50"
-        />
-      </label>
+      {profile.moduleM !== null && (
+        <label className="block">
+          <span className={labelClass}>Csurgó (mm)</span>
+          <input
+            type="number" min={0} step={10}
+            value={plane.eaveOverhangM ? Math.round(plane.eaveOverhangM * 1000) : ''}
+            onChange={e => onChange({ eaveOverhangM: (parseFloat(e.target.value) || 0) / 1000 })}
+            className={inputClass}
+            placeholder="50"
+          />
+        </label>
+      )}
 
       <div>
         <span className={labelClass}>Igazítás</span>
