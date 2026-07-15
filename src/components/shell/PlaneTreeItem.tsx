@@ -25,7 +25,7 @@ export function PlaneTreeItem({ plane, active, onSelect, onDuplicate, onMirror, 
         }`}
       >
         <span className={`flex-1 truncate ${!valid ? 'text-amber-600' : ''}`}>{plane.name}</span>
-        <div className="hidden group-hover:flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
           <button onClick={e => { e.stopPropagation(); onDuplicate() }} title="Másolás" className="text-slate-300 hover:text-blue-500 transition-colors">
             <Copy size={13} />
           </button>
